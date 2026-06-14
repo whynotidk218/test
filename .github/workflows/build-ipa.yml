@@ -1,4 +1,4 @@
-name: Build IPA for AltStore
+ửokfloname: Build IPA for AltStore
 
 on:
   workflow_dispatch: # Cho phép bấm nút chạy thủ công
@@ -9,7 +9,7 @@ jobs:
 
     steps:
     - name: Lấy code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         submodules: recursive
 
@@ -22,7 +22,7 @@ jobs:
         mkdir build
         cd build
         
-        # Lệnh này tạo file project cho iOS
+        # Cấu hình CMake
         cmake .. \
           -G "Xcode" \
           -DCMAKE_SYSTEM_NAME=iOS \
@@ -32,7 +32,7 @@ jobs:
           -DCMAKE_XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY="1,2" \
           -DCMAKE_XCODE_ATTRIBUTE_INFOPLIST_FILE=${GITHUB_WORKSPACE}/Info.plist
 
-        # Lệnh này nén code lại thành .ipa (không cần ký số)
+        # Build Archive
         xcodebuild -project CasioEmuMsvc.xcodeproj \
           -scheme CasioEmuMsvc \
           -configuration Release \
@@ -42,8 +42,7 @@ jobs:
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO
 
-        # Lệnh này xuất file .ipa ra ngoài
-        # Tạo file cấu hình xuất tạm
+        # Export IPA
         cat > ../ExportOptions.plist <<EOF
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -63,9 +62,3 @@ jobs:
           -archivePath App.xcarchive \
           -exportPath ../output \
           -exportOptionsPlist ../ExportOptions.plist
-
-    - name: Tải file IPA về
-      uses: actions/upload-artifact@v3
-      with:
-        name: App-IPA
-        path: output/*.ipa
