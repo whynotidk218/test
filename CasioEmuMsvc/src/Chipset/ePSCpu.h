@@ -6,6 +6,8 @@
 #include <functional>
 #include <iostream>
 #include <cstdarg>
+#include <cwchar>
+
 using byte = uint8_t;
 using uint = uint32_t;
 using ushort = uint16_t;
