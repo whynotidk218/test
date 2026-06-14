@@ -343,28 +343,5 @@ if(IOS)
 endif()
 
 # PHẦN BUILD IOS
-if(IOS)
-    # Tự động tìm tất cả các file .cpp, .c, .m, .mm trong thư mục hiện tại
-    # và các thư mục con (ngoại trừ thư mục build)
-    file(GLOB_RECURSE SOURCES 
-        ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/*.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/*.m
-        ${CMAKE_CURRENT_SOURCE_DIR}/*.mm
-    )
 
-    # Loại bỏ các file không phải là code chính (nếu có)
-    # Ví dụ loại bỏ các file test
-    list(FILTER SOURCES EXCLUDE REGEX ".*test.*")
-
-    # Tạo executable từ tất cả các file tìm được
-    add_executable(CasioEmuIOS ${SOURCES})
-
-    # Liên kết thư viện
-    target_link_libraries(CasioEmuIOS
-        PRIVATE
-        SDL2::SDL2main
-        SDL2::SDL2
-        asmjit::asmjit
-    )
-endif()
+#ík 
