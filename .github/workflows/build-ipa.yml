@@ -17,56 +17,69 @@ jobs:
       run: |
         brew install cmake ninja
 
+    - name: Kiểm tra Xcode
+      run: |
+        xcode-select --print-path
+        xcodebuild -version
+
     - name: Build IPA
       run: |
         # 1. Tạo thư mục build
-        mkdir build
+        mkdir -p build
         cd build
-        
-        # 2. Chạy CMake
+
+        # 2. Chạy CMake - sinh ra Xcode project
         cmake .. \
           -G "Xcode" \
           -DCMAKE_SYSTEM_NAME=iOS \
           -DCMAKE_OSX_ARCHITECTURES=arm64 \
           -DCMAKE_OSX_SYSROOT=iphoneos \
+          -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 \
           -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED="NO" \
-          -DCMAKE_XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY="1,2" \
-          -DCMAKE_XCODE_ATTRIBUTE_INFOPLIST_FILE=${GITHUB_WORKSPACE}/Info.plist
+          -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED="NO" \
+          -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY="" \
+          -DCMAKE_XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY="1,2"
 
-        # 3. Build Archive (Dùng tên cố định)
-        xcodebuild -project CasioEmuIOS.xcodeproj \
+        # 3. Kiểm tra scheme có tồn tại không
+        echo "=== Danh sách schemes ==="
+        xcodebuild -project CasioEmuIOS.xcodeproj -list
+
+        # 4. Build Archive (không cần sign)
+        xcodebuild \
+          -project CasioEmuIOS.xcodeproj \
           -scheme CasioEmuApp \
           -configuration Release \
-          -archivePath App.xcarchive \
+          -sdk iphoneos \
+          -archivePath "$GITHUB_WORKSPACE/build/App.xcarchive" \
           archive \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
-          CODE_SIGNING_ALLOWED=NO
+          CODE_SIGNING_ALLOWED=NO \
+          ENABLE_BITCODE=NO \
+          | xcpretty || true
 
-        # 4. Export IPA
-        cat > ${GITHUB_WORKSPACE}/ExportOptions.plist <<EOF
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0">
-        <dict>
-            <key>method</key>
-            <string>development</string>
-            <key>signingStyle</key>
-            <string>manual</string>
-            <key>teamID</key>
-            <string>AAAAAAAAAA</string>
-        </dict>
-        </plist>
-        EOF
+        # Kiểm tra archive có tạo ra không
+        if [ ! -d "$GITHUB_WORKSPACE/build/App.xcarchive" ]; then
+          echo "❌ Archive thất bại! Xem log bên trên."
+          exit 1
+        fi
+        echo "✅ Archive thành công"
 
-        xcodebuild -exportArchive \
-          -archivePath App.xcarchive \
-          -exportPath ${GITHUB_WORKSPACE}/output \
-          -exportOptionsPlist ${GITHUB_WORKSPACE}/ExportOptions.plist
+        # 5. Tạo cấu trúc IPA thủ công (không cần xcodebuild -exportArchive)
+        # Vì không có cert nên export trực tiếp từ .app bên trong archive
+        APP_PATH=$(find "$GITHUB_WORKSPACE/build/App.xcarchive" -name "*.app" | head -1)
+        echo "App path: $APP_PATH"
+
+        mkdir -p "$GITHUB_WORKSPACE/output/Payload"
+        cp -r "$APP_PATH" "$GITHUB_WORKSPACE/output/Payload/"
+
+        cd "$GITHUB_WORKSPACE/output"
+        zip -r App.ipa Payload/
+        echo "✅ Đã tạo IPA: $GITHUB_WORKSPACE/output/App.ipa"
 
     - name: Tải file IPA về
       uses: actions/upload-artifact@v4
       with:
-        name: App-IPA
-        path: output/*.ipa
-        if-no-files-found: warn
+        name: CasioEmu-IPA
+        path: output/App.ipa
+        if-no-files-found: error
