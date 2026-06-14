@@ -19,14 +19,10 @@ jobs:
 
     - name: Build IPA
       run: |
-        # 1. Vào thư mục con chứa project gốc
-        cd CasioEmuMsvc
-        
-        # 2. Tạo thư mục build
+        # Build ở thư mục gốc, dùng file CMakeLists.txt mới vừa tạo
         mkdir build
         cd build
-
-        # 3. Cấu hình CMake
+        
         cmake .. \
           -G "Xcode" \
           -DCMAKE_SYSTEM_NAME=iOS \
@@ -36,11 +32,10 @@ jobs:
           -DCMAKE_XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY="1,2" \
           -DCMAKE_XCODE_ATTRIBUTE_INFOPLIST_FILE=${GITHUB_WORKSPACE}/Info.plist
 
-        # 4. Tự động tìm tên project và scheme
+        # Tìm project và build
         PROJECT_FILE=$(ls *.xcodeproj | head -n 1)
         SCHEME_NAME=$(xcodebuild -project "$PROJECT_FILE" -list | grep -A 10 "Schemes:" | grep -v "Schemes:" | grep -v "^$" | head -n 1 | xargs)
 
-        # 5. Build Archive
         xcodebuild -project "$PROJECT_FILE" \
           -scheme "$SCHEME_NAME" \
           -configuration Release \
@@ -50,7 +45,7 @@ jobs:
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO
 
-        # 6. Export IPA
+        # Export IPA
         cat > ${GITHUB_WORKSPACE}/ExportOptions.plist <<EOF
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
