@@ -17,12 +17,13 @@ jobs:
       run: |
         brew install cmake ninja
 
-    - name: Build IPA
+        - name: Build IPA
       run: |
-        # Build ở thư mục gốc, dùng file CMakeLists.txt mới vừa tạo
+        # 1. Tạo thư mục build
         mkdir build
         cd build
         
+        # 2. Chạy CMake
         cmake .. \
           -G "Xcode" \
           -DCMAKE_SYSTEM_NAME=iOS \
@@ -32,12 +33,9 @@ jobs:
           -DCMAKE_XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY="1,2" \
           -DCMAKE_XCODE_ATTRIBUTE_INFOPLIST_FILE=${GITHUB_WORKSPACE}/Info.plist
 
-        # Tìm project và build
-        PROJECT_FILE=$(ls *.xcodeproj | head -n 1)
-        SCHEME_NAME=$(xcodebuild -project "$PROJECT_FILE" -list | grep -A 10 "Schemes:" | grep -v "Schemes:" | grep -v "^$" | head -n 1 | xargs)
-
-        xcodebuild -project "$PROJECT_FILE" \
-          -scheme "$SCHEME_NAME" \
+        # 3. Build Archive (Dùng tên cố định)
+        xcodebuild -project CasioEmuIOS.xcodeproj \
+          -scheme CasioEmuApp \
           -configuration Release \
           -archivePath App.xcarchive \
           archive \
@@ -45,7 +43,7 @@ jobs:
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO
 
-        # Export IPA
+        # 4. Export IPA
         cat > ${GITHUB_WORKSPACE}/ExportOptions.plist <<EOF
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
