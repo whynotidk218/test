@@ -1,7 +1,7 @@
 name: Build IPA for AltStore
 
 on:
-  workflow_dispatch: # Cho phép bấm nút chạy thủ công
+  workflow_dispatch:
 
 jobs:
   build:
@@ -22,7 +22,6 @@ jobs:
         mkdir build
         cd build
         
-        # Cấu hình CMake
         cmake .. \
           -G "Xcode" \
           -DCMAKE_SYSTEM_NAME=iOS \
@@ -32,7 +31,6 @@ jobs:
           -DCMAKE_XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY="1,2" \
           -DCMAKE_XCODE_ATTRIBUTE_INFOPLIST_FILE=${GITHUB_WORKSPACE}/Info.plist
 
-        # Build Archive
         xcodebuild -project CasioEmuMsvc.xcodeproj \
           -scheme CasioEmuMsvc \
           -configuration Release \
@@ -42,7 +40,6 @@ jobs:
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO
 
-        # Export IPA
         cat > ../ExportOptions.plist <<EOF
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -64,7 +61,7 @@ jobs:
           -exportOptionsPlist ../ExportOptions.plist
 
     - name: Tải file IPA về
-      uses: actions/upload-artifact@v4  <-- Đã cập nhật v4
+      uses: actions/upload-artifact@v4
       with:
         name: App-IPA
         path: output/*.ipa
