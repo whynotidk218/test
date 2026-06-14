@@ -319,3 +319,25 @@ if(NOT ANDROID AND NOT IOS AND NOT CASIOEMU_WEB)
         )
     endif()
 endif()
+
+# PHẦN THÊM VÀO ĐỂ BUILD iOS
+# Tạo một executable (ứng dụng) chạy được trên iOS
+if(IOS)
+    add_executable(CasioEmuIOS
+    
+        # --- LIỆT KÊ CÁC FILE .CPP CHÍNH CỦA APP Ở ĐÂY ---
+        # Bạn cần điền tên các file C++ chính vào đây. Nếu thiếu file, app sẽ chạy nhưng không làm gì cả.
+        # Ví dụ:
+        src/main.cpp
+        # Thêm các file cpp khác nếu cần...
+        # ------------------------------------------------
+    )
+
+    # Liên kết với các thư viện đã build (như SDL, asmjit)
+    target_link_libraries(CasioEmuIOS
+        PRIVATE
+        SDL2::SDL2main
+        SDL2::SDL2
+        asmjit::asmjit
+    )
+endif()
