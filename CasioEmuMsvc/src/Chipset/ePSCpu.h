@@ -153,13 +153,13 @@ namespace casioemu {
 		void Reset();
 
 		enum {
-			// 低速振荡器
+			// Low speed oscillator
 			ST_SLOW,
-			// 高速振荡器
+			// High speed oscillator
 			ST_FAST,
-			// 停止,低速振荡器继续工作
+			// Stop mode, low speed oscillator continues
 			ST_STOP,
-			// 全部停止
+			// Complete stop
 			ST_SLEEP,
 		} run_stat;
 		// ???
@@ -174,7 +174,7 @@ namespace casioemu {
 		uint8_t DAT_004202b7;
 		uint8_t InstFlags;
 
-		// 这个函数应该是用来初始化的（?)
+		// Initialization function (?)
 		// void FUN_004083f0(void)
 		//{
 		//	_memset(&StackRam, 0x0, 0x2258);
@@ -194,7 +194,7 @@ namespace casioemu {
 		//	return;
 		//}
 
-		// Port&Timer操作
+		// Port & Timer operations
 		void InvalidateTimerSetting(uint32_t unk);
 		void UpdateTimerSetting(uint32_t unk);
 		void InvalidatePORTA();
@@ -208,7 +208,7 @@ namespace casioemu {
 
 		using OP_Handler = void (ePSCPU::*)(byte* param_1);
 
-		// 用来修复那一坨shi
+		// Stack cookie for buffer overflow protection
 		static constexpr uint32_t g_stack_cookie = 0x11451419;
 		void Sleep(auto){};
 
@@ -384,5 +384,5 @@ namespace casioemu {
 
 		void OP_SWAPA(byte* param_1);
 
-	}; // namespace casioemu
-}; // namespace casioemu
+	}; // end of class ePSCPU
+} // end of namespace casioemu
