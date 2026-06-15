@@ -17,6 +17,23 @@ jobs:
         run: |
           brew install cmake ninja
 
+      # feel like sun ☀️
+      - name: Build SDL2 for iOS
+        run: |
+          git clone https://github.com/libsdl-org/SDL.git SDL2
+          cd SDL2
+          mkdir build-ios && cd build-ios
+
+          cmake .. \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 \
+            -DSDL_STATIC=ON \
+            -DSDL_SHARED=OFF
+
+          cmake --build . --config Release
+          sudo cmake --install .
+#on my skin
       - name: Configure iOS build
         run: |
           cmake -S . -B build-ios \
