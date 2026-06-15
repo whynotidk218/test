@@ -90,7 +90,8 @@ if(APPLE AND IOS)
         ${SOURCE_FILES}
 )
 
-    target_link_libraries(CasioEmuApp SDL2)    
+    target_link_libraries(CasioEmuApp SDL2)
+    target_link_libraries(CasioEmuApp SDL2 SDL2_image)
 
     set_target_properties(CasioEmuApp PROPERTIES
         MACOSX_BUNDLE TRUE
