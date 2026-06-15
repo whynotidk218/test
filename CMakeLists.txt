@@ -79,3 +79,20 @@ target_link_libraries(CasioEmuApp PRIVATE
     SDL2::SDL2-static
     SDL2_image::SDL2_image-static
 )
+
+if(APPLE AND IOS)
+    set(IOS_SOURCES
+        ios/main.m
+        ios/AppDelegate.m
+    )
+
+    add_executable(CasioEmuApp MACOSX_BUNDLE
+        ${IOS_SOURCES}
+        # thêm core C++ của bạn ở đây (nếu có file .cpp)
+    )
+
+    set_target_properties(CasioEmuApp PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/Info.plist
+    )
+endif()
