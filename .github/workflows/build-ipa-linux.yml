@@ -1,157 +1,47 @@
-name: Build IPA (Linux - Không cần Xcode)
+name: Build CasioEmu IPA
 
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: macos-latest
 
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-      with:
-        submodules: recursive
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-    - name: Cài clang + build tools + cctools deps
-      run: |
-        sudo apt-get update -qq
-        sudo apt-get install -y \
-          clang-14 lld-14 llvm-14 \
-          cmake ninja-build git curl tar xz-utils zip \
-          libssl-dev libxml2-dev libbz2-dev zlib1g-dev \
-          uuid-dev libplist-dev \
-          libblocksruntime-dev
+      - name: Install tools
+        run: |
+          brew install cmake ninja
 
-        sudo ln -sf /usr/bin/clang-14    /usr/local/bin/clang
-        sudo ln -sf /usr/bin/clang++-14  /usr/local/bin/clang++
-        sudo ln -sf /usr/bin/lld-14      /usr/local/bin/lld
-        sudo ln -sf /usr/bin/ld.lld-14   /usr/local/bin/ld.lld
-        sudo ln -sf /usr/bin/ld.lld-14   /usr/local/bin/ld
-        sudo ln -sf /usr/bin/llvm-ar-14      /usr/local/bin/llvm-ar
-        sudo ln -sf /usr/bin/llvm-ranlib-14  /usr/local/bin/llvm-ranlib
-        sudo ln -sf /usr/bin/llvm-strip-14   /usr/local/bin/llvm-strip
+      - name: Configure
+        run: |
+          mkdir -p build-ios
+          cd build-ios
+          cmake .. \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCASIO_IOS=ON \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0
 
-    - name: Build cctools-port (install_name_tool, otool, libtool)
-      run: |
-        git clone --depth=1 https://github.com/tpoechtrager/cctools-port.git /tmp/cctools-port
-        cd /tmp/cctools-port/cctools
-        ./configure \
-          --prefix=/usr/local \
-          --target=arm-apple-darwin \
-          --with-llvm-config=/usr/bin/llvm-config-14 \
-          --without-libdispatch \
-          CC=clang-14 CXX=clang++-14
-        make -j$(nproc)
-        sudo make install
+      - name: Build
+        run: |
+          cd build-ios
+          ninja -v CasioEmuApp
 
-        # Symlink tên ngắn không có -target suffix
-        for tool in install_name_tool otool lipo libtool; do
-          BIN=$(find /usr/local/bin -name "arm-apple-darwin-$tool" | head -1)
-          [ -n "$BIN" ] && sudo ln -sf "$BIN" /usr/local/bin/$tool && echo "$tool -> $BIN"
-        done
-        install_name_tool --version 2>/dev/null || echo "install_name_tool OK (no --version flag)"
+      - name: Create IPA
+        run: |
+          mkdir -p Payload/CasioEmu.app
+          cp build-ios/CasioEmuApp Payload/CasioEmu.app/
+          cp Info.plist Payload/CasioEmu.app/
+          chmod +x Payload/CasioEmu.app/CasioEmuApp
+          zip -r CasioEmu.ipa Payload
 
-    - name: Lấy iOS SDK
-      run: |
-        git clone --depth=1 --filter=blob:none --sparse \
-          https://github.com/xybp888/iOS-SDKs.git /opt/iossdk
-        cd /opt/iossdk
-        git sparse-checkout set iPhoneOS16.5.sdk
-        SDK_DIR="/opt/iossdk/iPhoneOS16.5.sdk"
-        if [ ! -d "$SDK_DIR" ]; then
-          echo "Không tìm thấy SDK:"
-          ls /opt/iossdk
-          exit 1
-        fi
-        echo "SDK_DIR=$SDK_DIR" >> $GITHUB_ENV
-        echo "SDK OK: $SDK_DIR"
-        ls -la "$SDK_DIR"
-
-    - name: Build SDL2
-      run: |
-        IOS_FLAGS="--target=arm64-apple-ios14.0 -isysroot ${{ env.SDK_DIR }} -fuse-ld=lld"
-        cd SDL && mkdir -p build-ios && cd build-ios
-        cmake .. -G Ninja \
-          -DCMAKE_C_COMPILER=clang \
-          -DCMAKE_CXX_COMPILER=clang++ \
-          -DCMAKE_C_FLAGS="$IOS_FLAGS" \
-          -DCMAKE_CXX_FLAGS="$IOS_FLAGS" \
-          -DCMAKE_EXE_LINKER_FLAGS="$IOS_FLAGS" \
-          -DCMAKE_SHARED_LINKER_FLAGS="$IOS_FLAGS" \
-          -DCMAKE_SYSTEM_NAME=Darwin \
-          -DCMAKE_SYSTEM_PROCESSOR=arm64 \
-          -DCMAKE_INSTALL_NAME_TOOL=/usr/local/bin/install_name_tool \
-          -DSDL_SHARED=OFF -DSDL_STATIC=ON -DSDL_TEST=OFF \
-          -DCMAKE_BUILD_TYPE=Release \
-          -DCMAKE_INSTALL_PREFIX=$GITHUB_WORKSPACE/sdl-install
-        ninja && ninja install
-        echo "SDL2 OK"
-
-    - name: Build SDL2_image
-      run: |
-        IOS_FLAGS="--target=arm64-apple-ios14.0 -isysroot ${{ env.SDK_DIR }} -fuse-ld=lld"
-        cd SDL_image && mkdir -p build-ios && cd build-ios
-        cmake .. -G Ninja \
-          -DCMAKE_C_COMPILER=clang \
-          -DCMAKE_CXX_COMPILER=clang++ \
-          -DCMAKE_C_FLAGS="$IOS_FLAGS" \
-          -DCMAKE_CXX_FLAGS="$IOS_FLAGS" \
-          -DCMAKE_SYSTEM_NAME=Darwin \
-          -DCMAKE_SYSTEM_PROCESSOR=arm64 \
-          -DCMAKE_INSTALL_NAME_TOOL=/usr/local/bin/install_name_tool \
-          -DCMAKE_BUILD_TYPE=Release \
-          -DSDL2_DIR=$GITHUB_WORKSPACE/sdl-install/lib/cmake/SDL2 \
-          -DCMAKE_INSTALL_PREFIX=$GITHUB_WORKSPACE/sdl-install \
-          -DSDL2IMAGE_SAMPLES=OFF \
-          -DSDL2IMAGE_TESTS=OFF \
-          -DSDL2IMAGE_WEBP=OFF \
-          -DSDL2IMAGE_TIF=OFF \
-          -DSDL2IMAGE_AVIF=OFF
-        ninja && ninja install
-        echo "SDL2_image OK"
-
-    - name: Build CasioEmu
-      run: |
-        IOS_FLAGS="--target=arm64-apple-ios14.0 -isysroot ${{ env.SDK_DIR }} -fuse-ld=lld"
-        mkdir -p build-ios && cd build-ios
-        cmake .. -G Ninja \
-          -DCMAKE_C_COMPILER=clang \
-          -DCMAKE_CXX_COMPILER=clang++ \
-          -DCMAKE_C_FLAGS="$IOS_FLAGS" \
-          -DCMAKE_CXX_FLAGS="$IOS_FLAGS -std=c++17" \
-          -DCMAKE_EXE_LINKER_FLAGS="$IOS_FLAGS -lc++ -lz" \
-          -DCMAKE_SYSTEM_NAME=Darwin \
-          -DCMAKE_SYSTEM_PROCESSOR=arm64 \
-          -DCMAKE_INSTALL_NAME_TOOL=/usr/local/bin/install_name_tool \
-          -DCMAKE_BUILD_TYPE=Release -DCASIO_IOS=ON \
-          -DSDL2_DIR=$GITHUB_WORKSPACE/sdl-install/lib/cmake/SDL2 \
-          -DSDL2_image_DIR=$GITHUB_WORKSPACE/sdl-install/lib/cmake/SDL2_image
-        ninja -v CasioEmuApp
-        file CasioEmuApp
-
-    - name: Đóng gói IPA
-      run: |
-        APP_DIR="$GITHUB_WORKSPACE/Payload/CasioEmu.app"
-        mkdir -p "$APP_DIR"
-        cp build-ios/CasioEmuApp "$APP_DIR/CasioEmuApp"
-        chmod +x "$APP_DIR/CasioEmuApp"
-        cp Info.plist "$APP_DIR/Info.plist"
-        for dir in CasioEmuMsvc/assets CasioEmuMsvc/models CasioEmuMsvc/res; do
-          [ -d "$dir" ] && cp -r "$dir/." "$APP_DIR/"
-        done
-        curl -L https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_linux_x86_64 -o /usr/local/bin/ldid
-        chmod +x /usr/local/bin/ldid
-        printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict><key>get-task-allow</key><true/></dict></plist>\n' > /tmp/ent.xml
-        ldid -S/tmp/ent.xml "$APP_DIR/CasioEmuApp" && echo "Fake-sign OK" || echo "ldid fail, Sideloadly sẽ tự sign"
-        cd "$GITHUB_WORKSPACE"
-        zip -r CasioEmu.ipa Payload/
-        test -f CasioEmu.ipa
-        ls -lh CasioEmu.ipa
-
-    - name: Upload IPA
-      uses: actions/upload-artifact@v4
-      with:
-        name: CasioEmu-IPA
-        path: CasioEmu.ipa
-        if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CasioEmu-IPA
+          path: CasioEmu.ipa
