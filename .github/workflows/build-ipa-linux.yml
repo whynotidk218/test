@@ -20,16 +20,24 @@ jobs:
         sudo ln -sf /usr/bin/clang-14   /usr/local/bin/clang
         sudo ln -sf /usr/bin/clang++-14 /usr/local/bin/clang++
 
-    - name: Lấy iOS SDK
+    - name: Tải iOS SDK (gh release download)
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: |
-        git clone --depth=1 --filter=blob:none --sparse https://github.com/theos/sdks.git /tmp/theos-sdks
-        cd /tmp/theos-sdks
-        git sparse-checkout set iPhoneOS16.5.sdk.tar.xz
         mkdir -p /opt/iossdk
-        tar -xf iPhoneOS16.5.sdk.tar.xz -C /opt/iossdk
+
+        # Dùng gh CLI (có sẵn trên ubuntu-22.04) để tải release asset đúng cách
+        gh release download 2023-11-23 \
+          --repo theos/sdks \
+          --pattern "iPhoneOS16.5.sdk.tar.xz" \
+          --dir /tmp/sdk-download
+
+        ls -lh /tmp/sdk-download/
+        tar -xf /tmp/sdk-download/iPhoneOS16.5.sdk.tar.xz -C /opt/iossdk
+
         SDK_DIR=$(find /opt/iossdk -maxdepth 2 -name "*.sdk" -type d | head -1)
         echo "SDK_DIR=$SDK_DIR" >> $GITHUB_ENV
-        echo "SDK: $SDK_DIR"
+        echo "✅ SDK: $SDK_DIR"
 
     - name: Build SDL2
       run: |
