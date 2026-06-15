@@ -1,83 +1,59 @@
-name: Build CasioEmu IPA (SideStore Ready)
+name: Build ios (idk)
 
 on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
   workflow_dispatch:
 
 jobs:
-  build-ios:
+  build:
     runs-on: macos-latest
 
     steps:
-      - name: Checkout
+    
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
 
-      - name: Install tools
+      # 2. Tự tải Submodule thủ công bằng tay với --depth 1 để chạy cực nhanh
+      - name: Initialize Submodules Manually
         run: |
-          brew install cmake ninja
+          git submodule update --init --recursive --depth 1
 
-      - name: Clone SDL2
-        run: |
-          git clone https://github.com/libsdl-org/SDL.git SDL2 --branch release-2.30.9 --depth 1
+      # 3. Cài đặt CMake
+      - name: Setup CMake
+        uses: jwlawson/actions-setup-cmake@v2
 
-      - name: Clone SDL2_image
+      # 4. Tạo file dự án Xcode bằng CMake cho iOS
+      - name: Configure CMake for iOS
         run: |
-          git clone https://github.com/libsdl-org/SDL_image.git SDL2_image --branch SDL2 --depth 1
-
-      - name: Configure iOS build
-        run: |
-          # Xóa cache cũ nếu có để tránh conflict
-          rm -rf build-ios
-          cmake -S . -B build-ios \
-            -G Xcode \
+          mkdir build && cd build
+          cmake .. -G Xcode \
             -DCMAKE_SYSTEM_NAME=iOS \
-            -DCMAKE_OSX_ARCHITECTURES=arm64 \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 \
-            -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED=NO \
-            -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED=NO \
-            -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY="" \
-            -DCMAKE_XCODE_ATTRIBUTE_ENABLE_BITCODE=NO \
-            -DCMAKE_XCODE_ATTRIBUTE_CLANG_CXX_LANGUAGE_STANDARD="gnu++20"
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
 
-      - name: Build
+      # 5. Biên dịch dự án thành file .app (Không cần ký mã - Code Sign)
+      - name: Build Xcode Project
         run: |
-          cmake --build build-ios --config Release --target CasioEmuApp -- \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            ENABLE_BITCODE=NO
+          cd build
+          xcodebuild -configuration Release -sdk iphoneos ARCHS="arm64" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO ONLY_ACTIVE_ARCH=NO
 
-      - name: Locate .app
+      # 6. Đóng gói file .app thành file .ipa chuẩn iOS
+      - name: Package .app into .ipa
         run: |
-          echo "Searching .app..."
-          find build-ios -type d -name "*.app" || true
-
-      - name: Prepare IPA
-        run: |
+          cd build
           mkdir -p Payload
+          # Tự động tìm và copy file .app được sinh ra vào thư mục Payload
+          cp -r Release-iphoneos/*.app Payload/
+          # Nén thư mục Payload thành file .ipa
+          zip -r CasioEmu.ipa Payload
 
-          APP_PATH=$(find build-ios -type d -name "*.app" | head -n 1)
-
-          if [ -z "$APP_PATH" ]; then
-            echo "ERROR: .app bundle not found!"
-            exit 1
-          fi
-
-          echo "Found app: $APP_PATH"
-          cp -R "$APP_PATH" Payload/
-
-          # Ensure binary is executable
-          APP_NAME=$(basename "$APP_PATH" .app)
-          chmod +x "Payload/${APP_NAME}.app/${APP_NAME}" || true
-          chmod +x "Payload/${APP_NAME}.app/CasioEmuApp" || true
-
-      - name: Create IPA
-        run: |
-          zip -r CasioEmu.ipa Payload/
-
-      - name: Upload IPA
+      # 7. Đẩy file .ipa lên mục Artifacts của GitHub để bạn tải về
+      - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CasioEmu-SideStore-IPA
-          path: CasioEmu.ipa
+          name: CasioEmu-iOS-IPA
+          path: build/CasioEmu.ipa
