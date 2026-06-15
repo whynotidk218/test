@@ -1,0 +1,59 @@
+name: Build CasioEmu IPA (AltStore Ready)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install tools
+        run: |
+          brew install cmake ninja
+
+      - name: Configure iOS build
+        run: |
+          cmake -S . -B build-ios \
+            -G Xcode \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0
+
+      - name: Build Xcode project
+        run: |
+          cmake --build build-ios --config Release --target CasioEmuApp
+
+      - name: Locate .app
+        run: |
+          echo "Searching .app..."
+          find build-ios -type d -name "*.app" || true
+          find build-ios -type f -name "CasioEmuApp" || true
+
+      - name: Prepare IPA
+        run: |
+          mkdir -p Payload
+
+          APP_PATH=$(find build-ios -type d -name "*.app" | head -n 1)
+
+          echo "Found app: $APP_PATH"
+
+          cp -R "$APP_PATH" Payload/
+
+          chmod +x Payload/*.app/CasioEmuApp || true
+
+      - name: Create IPA
+        run: |
+          cd Payload
+          zip -r ../CasioEmu.ipa .
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: CasioEmu-AltStore-IPA
+          path: CasioEmu.ipa
