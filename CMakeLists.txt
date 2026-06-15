@@ -8,9 +8,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # ── SDL2 từ install prefix ────────────────────────────────────────
-find_package(SDL2 REQUIRED)
-find_package(SDL2_image REQUIRED)
 
+find_package(SDL2_image REQUIRED)
+add_subdirectory(SDL2)
 # ── Thu thập source files ─────────────────────────────────────────
 file(GLOB_RECURSE APP_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/CasioEmuMsvc/src/*.cpp
@@ -87,9 +87,10 @@ if(APPLE AND IOS)
     )
 
     add_executable(CasioEmuApp MACOSX_BUNDLE
-        ${IOS_SOURCES}
-        # thêm core C++ của bạn ở đây (nếu có file .cpp)
-    )
+        ${SOURCE_FILES}
+)
+
+    target_link_libraries(CasioEmuApp SDL2)    
 
     set_target_properties(CasioEmuApp PROPERTIES
         MACOSX_BUNDLE TRUE
