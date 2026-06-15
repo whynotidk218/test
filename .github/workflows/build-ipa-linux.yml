@@ -13,16 +13,42 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Cài clang + build tools
+    - name: Cài clang + build tools + cctools
       run: |
         sudo apt-get update -qq
-        sudo apt-get install -y clang-14 lld-14 cmake ninja-build git curl tar xz-utils zip
+        sudo apt-get install -y \
+          clang-14 lld-14 llvm-14 \
+          cmake ninja-build git curl tar xz-utils zip \
+          libssl-dev libxml2-dev libbz2-dev zlib1g-dev \
+          uuid-dev libplist-dev
+
         sudo ln -sf /usr/bin/clang-14    /usr/local/bin/clang
         sudo ln -sf /usr/bin/clang++-14  /usr/local/bin/clang++
         sudo ln -sf /usr/bin/lld-14      /usr/local/bin/lld
         sudo ln -sf /usr/bin/ld.lld-14   /usr/local/bin/ld.lld
-        # Đảm bảo ld -> lld (không dùng GNU ld)
         sudo ln -sf /usr/bin/ld.lld-14   /usr/local/bin/ld
+        sudo ln -sf /usr/bin/llvm-ar-14       /usr/local/bin/llvm-ar
+        sudo ln -sf /usr/bin/llvm-ranlib-14   /usr/local/bin/llvm-ranlib
+        sudo ln -sf /usr/bin/llvm-strip-14    /usr/local/bin/llvm-strip
+        sudo ln -sf /usr/bin/llvm-objcopy-14  /usr/local/bin/llvm-objcopy
+
+    - name: Build cctools-port (cung cấp install_name_tool, otool, libtool)
+      run: |
+        git clone --depth=1 https://github.com/tpoechtrager/cctools-port.git /tmp/cctools-port
+        cd /tmp/cctools-port/cctools
+        ./configure \
+          --prefix=/usr/local \
+          --target=arm-apple-darwin \
+          --with-llvm-config=/usr/bin/llvm-config-14 \
+          CC=clang-14 CXX=clang++-14
+        make -j$(nproc)
+        sudo make install
+
+        # Tạo symlink không có suffix -target
+        for tool in install_name_tool otool lipo libtool; do
+          BIN=$(find /usr/local/bin -name "*$tool*" | head -1)
+          [ -n "$BIN" ] && sudo ln -sf "$BIN" /usr/local/bin/$tool && echo "✅ $tool -> $BIN"
+        done
 
     - name: Lấy iOS SDK
       run: |
@@ -41,7 +67,6 @@ jobs:
 
     - name: Build SDL2
       run: |
-        # -fuse-ld=lld: ép clang dùng lld thay GNU ld
         IOS_FLAGS="--target=arm64-apple-ios14.0 -isysroot ${{ env.SDK_DIR }} -fuse-ld=lld"
         cd SDL && mkdir -p build-ios && cd build-ios
         cmake .. -G Ninja \
@@ -53,6 +78,7 @@ jobs:
           -DCMAKE_SHARED_LINKER_FLAGS="$IOS_FLAGS" \
           -DCMAKE_SYSTEM_NAME=Darwin \
           -DCMAKE_SYSTEM_PROCESSOR=arm64 \
+          -DCMAKE_INSTALL_NAME_TOOL=/usr/local/bin/install_name_tool \
           -DSDL_SHARED=OFF -DSDL_STATIC=ON -DSDL_TEST=OFF \
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_INSTALL_PREFIX=$GITHUB_WORKSPACE/sdl-install
@@ -70,6 +96,7 @@ jobs:
           -DCMAKE_CXX_FLAGS="$IOS_FLAGS" \
           -DCMAKE_SYSTEM_NAME=Darwin \
           -DCMAKE_SYSTEM_PROCESSOR=arm64 \
+          -DCMAKE_INSTALL_NAME_TOOL=/usr/local/bin/install_name_tool \
           -DCMAKE_BUILD_TYPE=Release \
           -DSDL2_DIR=$GITHUB_WORKSPACE/sdl-install/lib/cmake/SDL2 \
           -DCMAKE_INSTALL_PREFIX=$GITHUB_WORKSPACE/sdl-install \
@@ -89,6 +116,7 @@ jobs:
           -DCMAKE_EXE_LINKER_FLAGS="$IOS_FLAGS -lc++ -lz" \
           -DCMAKE_SYSTEM_NAME=Darwin \
           -DCMAKE_SYSTEM_PROCESSOR=arm64 \
+          -DCMAKE_INSTALL_NAME_TOOL=/usr/local/bin/install_name_tool \
           -DCMAKE_BUILD_TYPE=Release -DCASIO_IOS=ON \
           -DSDL2_DIR=$GITHUB_WORKSPACE/sdl-install/lib/cmake/SDL2 \
           -DSDL2_image_DIR=$GITHUB_WORKSPACE/sdl-install/lib/cmake/SDL2_image
