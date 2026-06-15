@@ -34,14 +34,18 @@ file(GLOB_RECURSE APP_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/CasioEmuMsvc/third_party/miniz/*.c"
 )
 
+# FIX: casioemu.cpp chứa int main() sẽ conflict với ios/main.m
+# Trên iOS dùng UIApplicationMain từ ios/main.m, nên exclude casioemu.cpp
+# và thay bằng ios_stubs/casioemu_ios.cpp (gọi emulator init không có main)
 list(FILTER APP_SOURCES EXCLUDE REGEX
-".*(sdl_win32_extra|Ext/DiscordRPC|CrashHandler|Web/core_api|Web/web_main|Plugin/PluginMan|Plugin/PluginApi_Impl|Rop/RopCompilerUI|legacy/trash|JitU8).*\\.(cpp|c)$"
+".*(sdl_win32_extra|Ext/DiscordRPC|CrashHandler|Web/core_api|Web/web_main|Plugin/PluginMan|Plugin/PluginApi_Impl|Rop/RopCompilerUI|legacy/trash|JitU8|casioemu\\.cpp).*\\.(cpp|c)$"
 )
 
 list(APPEND APP_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/ios_stubs/DiscordRPC_stub.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ios_stubs/CrashHandler_stub.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ios_stubs/Plugin_stub.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ios_stubs/casioemu_ios.cpp"
 )
 
 # iOS entry files
@@ -93,7 +97,7 @@ target_compile_definitions(CasioEmuApp PRIVATE
 )
 
 # ------------------------------------------------------------
-# Link SDL
+# Link SDL + iOS frameworks
 # ------------------------------------------------------------
 
 target_link_libraries(CasioEmuApp PRIVATE
@@ -101,8 +105,23 @@ target_link_libraries(CasioEmuApp PRIVATE
     SDL2_image
 )
 
+if(APPLE AND CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    target_link_libraries(CasioEmuApp PRIVATE
+        "-framework UIKit"
+        "-framework Foundation"
+        "-framework CoreGraphics"
+        "-framework CoreMotion"
+        "-framework AudioToolbox"
+        "-framework AVFoundation"
+        "-framework GameController"
+        "-framework CoreHaptics"
+        "-framework Metal"
+        "-framework OpenGLES"
+    )
+endif()
+
 # ------------------------------------------------------------
-# iOS bundle
+# iOS bundle + Code Signing (disabled for SideStore)
 # ------------------------------------------------------------
 
 if(APPLE)
@@ -110,5 +129,10 @@ if(APPLE)
         MACOSX_BUNDLE TRUE
         MACOSX_BUNDLE_INFO_PLIST
         "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist"
+        # Tắt code signing - SideStore sẽ tự ký khi cài
+        XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "NO"
+        XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED "NO"
+        XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY ""
+        XCODE_ATTRIBUTE_ENABLE_BITCODE "NO"
     )
 endif()
