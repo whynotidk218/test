@@ -13,26 +13,26 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Cài clang + build tools + cctools
+    - name: Cài clang + build tools + cctools deps
       run: |
         sudo apt-get update -qq
         sudo apt-get install -y \
           clang-14 lld-14 llvm-14 \
           cmake ninja-build git curl tar xz-utils zip \
           libssl-dev libxml2-dev libbz2-dev zlib1g-dev \
-          uuid-dev libplist-dev
+          uuid-dev libplist-dev \
+          libblocksruntime-dev libdispatch-dev
 
         sudo ln -sf /usr/bin/clang-14    /usr/local/bin/clang
         sudo ln -sf /usr/bin/clang++-14  /usr/local/bin/clang++
         sudo ln -sf /usr/bin/lld-14      /usr/local/bin/lld
         sudo ln -sf /usr/bin/ld.lld-14   /usr/local/bin/ld.lld
         sudo ln -sf /usr/bin/ld.lld-14   /usr/local/bin/ld
-        sudo ln -sf /usr/bin/llvm-ar-14       /usr/local/bin/llvm-ar
-        sudo ln -sf /usr/bin/llvm-ranlib-14   /usr/local/bin/llvm-ranlib
-        sudo ln -sf /usr/bin/llvm-strip-14    /usr/local/bin/llvm-strip
-        sudo ln -sf /usr/bin/llvm-objcopy-14  /usr/local/bin/llvm-objcopy
+        sudo ln -sf /usr/bin/llvm-ar-14      /usr/local/bin/llvm-ar
+        sudo ln -sf /usr/bin/llvm-ranlib-14  /usr/local/bin/llvm-ranlib
+        sudo ln -sf /usr/bin/llvm-strip-14   /usr/local/bin/llvm-strip
 
-    - name: Build cctools-port (cung cấp install_name_tool, otool, libtool)
+    - name: Build cctools-port (install_name_tool, otool, libtool)
       run: |
         git clone --depth=1 https://github.com/tpoechtrager/cctools-port.git /tmp/cctools-port
         cd /tmp/cctools-port/cctools
@@ -44,11 +44,12 @@ jobs:
         make -j$(nproc)
         sudo make install
 
-        # Tạo symlink không có suffix -target
+        # Symlink tên ngắn không có -target suffix
         for tool in install_name_tool otool lipo libtool; do
-          BIN=$(find /usr/local/bin -name "*$tool*" | head -1)
-          [ -n "$BIN" ] && sudo ln -sf "$BIN" /usr/local/bin/$tool && echo "✅ $tool -> $BIN"
+          BIN=$(find /usr/local/bin -name "arm-apple-darwin-$tool" | head -1)
+          [ -n "$BIN" ] && sudo ln -sf "$BIN" /usr/local/bin/$tool && echo "$tool -> $BIN"
         done
+        install_name_tool --version 2>/dev/null || echo "install_name_tool OK (no --version flag)"
 
     - name: Lấy iOS SDK
       run: |
