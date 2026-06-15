@@ -27,6 +27,8 @@ jobs:
 
       - name: Configure iOS build
         run: |
+          # Xóa cache cũ nếu có để tránh conflict
+          rm -rf build-ios
           cmake -S . -B build-ios \
             -G Xcode \
             -DCMAKE_SYSTEM_NAME=iOS \
