@@ -46,7 +46,7 @@ file(GLOB_RECURSE APP_SOURCES
 # Trên iOS dùng UIApplicationMain từ ios/main.m, nên exclude casioemu.cpp
 # và thay bằng ios_stubs/casioemu_ios.cpp (gọi emulator init không có main)
 list(FILTER APP_SOURCES EXCLUDE REGEX
-".*(sdl_win32_extra|Ext/DiscordRPC|CrashHandler|Web/core_api|Web/web_main|Plugin/PluginMan|Plugin/PluginApi_Impl|Rop/RopCompilerUI|legacy/trash|JitU8|casioemu\\.cpp).*\\.(cpp|c)$"
+".*(sdl_win32_extra|Ext/DiscordRPC|CrashHandler|Web/core_api|Web/web_main|Plugin/PluginMan|Plugin/PluginApi_Impl|Rop/RopCompilerUI|legacy/trash|JitU8|casioemu).*\\.(cpp|c)$"
 )
 
 list(APPEND APP_SOURCES
@@ -99,7 +99,7 @@ target_compile_definitions(CasioEmuApp PRIVATE
     CASIO_IOS=1
     NO_JIT=1
     NO_DISCORD=1
-    NO_SENTRY=1
+    DISABLE_SENTRY=1
     NO_PLUGINS=1
     SDL_MAIN_HANDLED
 )
