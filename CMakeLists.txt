@@ -18,6 +18,14 @@ set(SDLIMAGE_VENDORED ON)
 set(SDLIMAGE_BACKEND_IMAGEIO OFF)
 set(SDLIMAGE_BACKEND_STB ON)
 
+# FIX: Ép cả SDL2 và SDL2_image chỉ build static
+# Phải set TRƯỚC add_subdirectory để cache không bị override
+set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+set(SDL_STATIC ON  CACHE BOOL "" FORCE)
+set(SDL2IMAGE_SHARED OFF CACHE BOOL "" FORCE)
+set(SDL2IMAGE_STATIC ON  CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+
 # SDL trước, SDL_image sau
 add_subdirectory(SDL2)
 add_subdirectory(SDL2_image)
@@ -102,7 +110,7 @@ target_compile_definitions(CasioEmuApp PRIVATE
 
 target_link_libraries(CasioEmuApp PRIVATE
     SDL2::SDL2-static
-    SDL2_image
+    SDL2_image::SDL2_image-static
 )
 
 if(APPLE AND CMAKE_SYSTEM_NAME STREQUAL "iOS")
