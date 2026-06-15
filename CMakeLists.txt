@@ -9,7 +9,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # ── SDL2 từ install prefix ────────────────────────────────────────
 
-find_package(SDL2_image REQUIRED)
+add_subdirectory(SDL2_image)
 add_subdirectory(SDL2)
 # ── Thu thập source files ─────────────────────────────────────────
 file(GLOB_RECURSE APP_SOURCES
@@ -91,7 +91,10 @@ if(APPLE AND IOS)
 )
 
     target_link_libraries(CasioEmuApp SDL2)
-    target_link_libraries(CasioEmuApp SDL2 SDL2_image)
+    target_link_libraries(CasioEmuApp
+        SDL2
+        SDL2_image
+    )
 
     set_target_properties(CasioEmuApp PROPERTIES
         MACOSX_BUNDLE TRUE
