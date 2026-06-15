@@ -15,7 +15,9 @@
 #include "Romu.h"
 #include "SysDialog.h"
 #include "Ui.hpp"
+#ifdef _WIN32
 #include "sdl_win32_extra.h"
+#endif
 #include <Gui.h>
 #include <SDL.h>
 #include <SDL_image.h>
