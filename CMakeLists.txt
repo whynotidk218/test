@@ -21,6 +21,8 @@ set(SDLIMAGE_BACKEND_STB ON)
 # SDL trước, SDL_image sau
 add_subdirectory(SDL2)
 add_subdirectory(SDL2_image)
+get_property(allTargets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+message(STATUS "Targets: ${allTargets}")
 
 # ------------------------------------------------------------
 # Sources
@@ -96,7 +98,7 @@ target_compile_definitions(CasioEmuApp PRIVATE
 
 target_link_libraries(CasioEmuApp PRIVATE
     SDL2::SDL2-static
-    SDL2_image::SDL2_image-static
+    SDL2_image
 )
 
 # ------------------------------------------------------------
