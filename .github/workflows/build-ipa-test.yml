@@ -1,4 +1,4 @@
-name: Build CasioEmu IPA (AltStore Ready)
+name: Build CasioEmu IPA (SideStore Ready)
 
 on:
   workflow_dispatch:
@@ -19,11 +19,12 @@ jobs:
 
       - name: Clone SDL2
         run: |
-          git clone https://github.com/libsdl-org/SDL.git SDL2 --branch release-2.30.9
+          git clone https://github.com/libsdl-org/SDL.git SDL2 --branch release-2.30.9 --depth 1
+
       - name: Clone SDL2_image
         run: |
-          git clone https://github.com/libsdl-org/SDL_image.git SDL2_image --branch SDL2
-#on my skin
+          git clone https://github.com/libsdl-org/SDL_image.git SDL2_image --branch SDL2 --depth 1
+
       - name: Configure iOS build
         run: |
           cmake -S . -B build-ios \
@@ -31,17 +32,23 @@ jobs:
             -DCMAKE_SYSTEM_NAME=iOS \
             -DCMAKE_OSX_ARCHITECTURES=arm64 \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 \
+            -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED=NO \
+            -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED=NO \
+            -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY="" \
+            -DCMAKE_XCODE_ATTRIBUTE_ENABLE_BITCODE=NO
 
       - name: Build
         run: |
-          cmake --build build-ios --config Release --target CasioEmuApp
-           
+          cmake --build build-ios --config Release --target CasioEmuApp -- \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            ENABLE_BITCODE=NO
+
       - name: Locate .app
-       
         run: |
           echo "Searching .app..."
           find build-ios -type d -name "*.app" || true
-          find build-ios -type f -name "CasioEmuApp" || true
 
       - name: Prepare IPA
         run: |
@@ -49,20 +56,25 @@ jobs:
 
           APP_PATH=$(find build-ios -type d -name "*.app" | head -n 1)
 
-          echo "Found app: $APP_PATH"
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: .app bundle not found!"
+            exit 1
+          fi
 
+          echo "Found app: $APP_PATH"
           cp -R "$APP_PATH" Payload/
 
-          chmod +x Payload/*.app/CasioEmuApp || true
+          # Ensure binary is executable
+          APP_NAME=$(basename "$APP_PATH" .app)
+          chmod +x "Payload/${APP_NAME}.app/${APP_NAME}" || true
+          chmod +x "Payload/${APP_NAME}.app/CasioEmuApp" || true
 
       - name: Create IPA
         run: |
-          cd Payload
-          zip -r ../CasioEmu.ipa .
-
+          zip -r CasioEmu.ipa Payload/
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: CasioEmu-AltStore-IPA
+          name: CasioEmu-SideStore-IPA
           path: CasioEmu.ipa
