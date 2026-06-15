@@ -14,46 +14,56 @@ jobs:
       with:
         submodules: recursive
 
-    # ── 2. Cài toolchain cross-compile arm64 iOS ────────────────────
-    - name: Cài clang + iOS SDK
+    # ── 2. Cài toolchain ───────────────────────────────────────────
+    - name: Cài clang + build tools
       run: |
         sudo apt-get update -qq
         sudo apt-get install -y \
-          clang lld cmake ninja-build \
+          clang-14 lld-14 cmake ninja-build \
           git curl tar xz-utils zip python3
 
-        # Tải iOS SDK (được extract sẵn từ Xcode bởi community - hợp lệ để dùng)
-        # SDK 16.2 - tương thích iOS 14+
-        SDK_URL="https://github.com/xybp888/iOS-SDKs/releases/download/iOS-sdk16.2/iPhoneOS16.2.sdk.tar.xz"
-        echo "Tải iOS SDK..."
-        curl -L "$SDK_URL" -o iPhoneOS.sdk.tar.xz
-        sudo mkdir -p /opt/iossdk
-        sudo tar -xf iPhoneOS.sdk.tar.xz -C /opt/iossdk
-        # Tìm thư mục SDK vừa giải nén
+        # Alias để gọi ngắn gọn
+        sudo ln -sf /usr/bin/clang-14    /usr/local/bin/clang
+        sudo ln -sf /usr/bin/clang++-14  /usr/local/bin/clang++
+        sudo ln -sf /usr/bin/lld-14      /usr/local/bin/lld
+
+    # ── 3. Tải iOS SDK (theos/sdks - uy tín, tồn tại từ 2023) ─────
+    - name: Tải iOS 16.5 SDK
+      run: |
+        SDK_URL="https://github.com/theos/sdks/releases/download/2023-11-23/iPhoneOS16.5.sdk.tar.xz"
+        echo "Tải SDK từ theos/sdks..."
+        curl -L "$SDK_URL" -o iPhoneOS.sdk.tar.xz --retry 3 --retry-delay 5
+
+        # Kiểm tra file tải về có hợp lệ không
+        file iPhoneOS.sdk.tar.xz
+        ls -lh iPhoneOS.sdk.tar.xz
+
+        # Giải nén
+        mkdir -p /opt/iossdk
+        tar -xf iPhoneOS.sdk.tar.xz -C /opt/iossdk
+
+        # Tìm thư mục SDK
         SDK_DIR=$(find /opt/iossdk -maxdepth 2 -name "*.sdk" -type d | head -1)
-        if [ -z "$SDK_DIR" ]; then
-          # Thử tên thư mục khác
-          SDK_DIR=$(find /opt/iossdk -maxdepth 2 -type d | head -2 | tail -1)
-        fi
         echo "SDK_DIR=$SDK_DIR" >> $GITHUB_ENV
-        echo "Dùng SDK: $SDK_DIR"
+        echo "✅ SDK: $SDK_DIR"
         ls "$SDK_DIR" | head -10
 
-    # ── 3. Build SDL2 cho iOS arm64 ─────────────────────────────────
-    - name: Build SDL2 (cross-compile iOS arm64)
+    # ── 4. Build SDL2 cho iOS arm64 ─────────────────────────────────
+    - name: Build SDL2
       run: |
+        IOS_FLAGS="--target=arm64-apple-ios14.0 -isysroot ${{ env.SDK_DIR }}"
         cd SDL
         mkdir -p build-ios && cd build-ios
         cmake .. \
           -G Ninja \
-          -DCMAKE_SYSTEM_NAME=iOS \
-          -DCMAKE_OSX_ARCHITECTURES=arm64 \
-          -DCMAKE_OSX_SYSROOT=${{ env.SDK_DIR }} \
           -DCMAKE_C_COMPILER=clang \
           -DCMAKE_CXX_COMPILER=clang++ \
-          -DCMAKE_C_FLAGS="--target=arm64-apple-ios14.0 -isysroot ${{ env.SDK_DIR }}" \
-          -DCMAKE_CXX_FLAGS="--target=arm64-apple-ios14.0 -isysroot ${{ env.SDK_DIR }}" \
-          -DCMAKE_EXE_LINKER_FLAGS="--target=arm64-apple-ios14.0" \
+          -DCMAKE_C_FLAGS="$IOS_FLAGS" \
+          -DCMAKE_CXX_FLAGS="$IOS_FLAGS" \
+          -DCMAKE_EXE_LINKER_FLAGS="$IOS_FLAGS" \
+          -DCMAKE_SHARED_LINKER_FLAGS="$IOS_FLAGS" \
+          -DCMAKE_SYSTEM_NAME=Darwin \
+          -DCMAKE_SYSTEM_PROCESSOR=arm64 \
           -DSDL_SHARED=OFF \
           -DSDL_STATIC=ON \
           -DSDL_TEST=OFF \
@@ -63,22 +73,23 @@ jobs:
           -DCMAKE_INSTALL_PREFIX=$GITHUB_WORKSPACE/sdl-install
         ninja
         ninja install
-        echo "SDL2 build xong"
+        echo "✅ SDL2 xong"
 
-    # ── 4. Build SDL2_image cho iOS arm64 ──────────────────────────
-    - name: Build SDL2_image (cross-compile iOS arm64)
+    # ── 5. Build SDL2_image cho iOS arm64 ──────────────────────────
+    - name: Build SDL2_image
       run: |
+        IOS_FLAGS="--target=arm64-apple-ios14.0 -isysroot ${{ env.SDK_DIR }}"
         cd SDL_image
         mkdir -p build-ios && cd build-ios
         cmake .. \
           -G Ninja \
-          -DCMAKE_SYSTEM_NAME=iOS \
-          -DCMAKE_OSX_ARCHITECTURES=arm64 \
-          -DCMAKE_OSX_SYSROOT=${{ env.SDK_DIR }} \
           -DCMAKE_C_COMPILER=clang \
           -DCMAKE_CXX_COMPILER=clang++ \
-          -DCMAKE_C_FLAGS="--target=arm64-apple-ios14.0 -isysroot ${{ env.SDK_DIR }}" \
-          -DCMAKE_CXX_FLAGS="--target=arm64-apple-ios14.0 -isysroot ${{ env.SDK_DIR }}" \
+          -DCMAKE_C_FLAGS="$IOS_FLAGS" \
+          -DCMAKE_CXX_FLAGS="$IOS_FLAGS" \
+          -DCMAKE_EXE_LINKER_FLAGS="$IOS_FLAGS" \
+          -DCMAKE_SYSTEM_NAME=Darwin \
+          -DCMAKE_SYSTEM_PROCESSOR=arm64 \
           -DCMAKE_BUILD_TYPE=Release \
           -DSDL2_DIR=$GITHUB_WORKSPACE/sdl-install/lib/cmake/SDL2 \
           -DCMAKE_INSTALL_PREFIX=$GITHUB_WORKSPACE/sdl-install \
@@ -86,72 +97,71 @@ jobs:
           -DSDL2IMAGE_TESTS=OFF
         ninja
         ninja install
-        echo "SDL2_image build xong"
+        echo "✅ SDL2_image xong"
 
-    # ── 5. Build app chính ──────────────────────────────────────────
-    - name: Build CasioEmu (cross-compile iOS arm64)
+    # ── 6. Build app chính ──────────────────────────────────────────
+    - name: Build CasioEmu
       run: |
-        mkdir -p build-ios && cd build-ios
-
         IOS_FLAGS="--target=arm64-apple-ios14.0 -isysroot ${{ env.SDK_DIR }}"
-
+        mkdir -p build-ios && cd build-ios
         cmake .. \
           -G Ninja \
-          -DCMAKE_SYSTEM_NAME=iOS \
-          -DCMAKE_OSX_ARCHITECTURES=arm64 \
-          -DCMAKE_OSX_SYSROOT=${{ env.SDK_DIR }} \
           -DCMAKE_C_COMPILER=clang \
           -DCMAKE_CXX_COMPILER=clang++ \
           -DCMAKE_C_FLAGS="$IOS_FLAGS" \
           -DCMAKE_CXX_FLAGS="$IOS_FLAGS -std=c++17" \
           -DCMAKE_EXE_LINKER_FLAGS="$IOS_FLAGS -lc++ -lz" \
+          -DCMAKE_SYSTEM_NAME=Darwin \
+          -DCMAKE_SYSTEM_PROCESSOR=arm64 \
           -DCMAKE_BUILD_TYPE=Release \
           -DCASIO_IOS=ON \
           -DSDL2_DIR=$GITHUB_WORKSPACE/sdl-install/lib/cmake/SDL2 \
           -DSDL2_image_DIR=$GITHUB_WORKSPACE/sdl-install/lib/cmake/SDL2_image
-
         ninja CasioEmuApp
-        echo "Build xong! Binary:"
+        echo "✅ Build xong"
         ls -lh CasioEmuApp
+        file CasioEmuApp
 
-    # ── 6. Đóng gói thành .ipa ─────────────────────────────────────
+    # ── 7. Đóng gói thành .ipa ─────────────────────────────────────
     - name: Đóng gói IPA
       run: |
-        # Tạo cấu trúc .app bundle thủ công
         APP_DIR="$GITHUB_WORKSPACE/Payload/CasioEmu.app"
         mkdir -p "$APP_DIR"
 
-        # Copy binary
+        # Binary
         cp build-ios/CasioEmuApp "$APP_DIR/CasioEmuApp"
+        chmod +x "$APP_DIR/CasioEmuApp"
 
-        # Copy Info.plist
+        # Info.plist (bắt buộc)
         cp Info.plist "$APP_DIR/Info.plist"
 
-        # Copy assets nếu có (ROM, hình ảnh giao diện...)
-        if [ -d "CasioEmuMsvc/assets" ]; then
-          cp -r CasioEmuMsvc/assets/. "$APP_DIR/"
-        fi
-        if [ -d "CasioEmuMsvc/models" ]; then
-          mkdir -p "$APP_DIR/models"
-          cp -r CasioEmuMsvc/models/. "$APP_DIR/models/"
-        fi
+        # Assets nếu có
+        for dir in CasioEmuMsvc/assets CasioEmuMsvc/models CasioEmuMsvc/res; do
+          [ -d "$dir" ] && cp -r "$dir/." "$APP_DIR/"
+        done
 
-        # Fake sign để AltStore/Sideloadly nhận (ldid không cần cert thật)
-        if command -v ldid &>/dev/null; then
-          ldid -S "$APP_DIR/CasioEmuApp"
-          echo "Đã fake-sign bằng ldid"
-        else
-          # Tạo entitlements trống - Sideloadly sẽ sign lại
-          echo "ldid không có, bỏ qua - Sideloadly sẽ tự sign"
-        fi
+        # Fake entitlements (để Sideloadly/AltStore nhận)
+        cat > /tmp/ent.xml << 'EOF'
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0"><dict>
+          <key>get-task-allow</key><true/>
+        </dict></plist>
+        EOF
+
+        # Cài ldid để fake-sign (Sideloadly vẫn cần binary có Mach-O header đúng)
+        curl -sL https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_linux_x86_64 \
+          -o /usr/local/bin/ldid --retry 3
+        chmod +x /usr/local/bin/ldid
+        ldid -S/tmp/ent.xml "$APP_DIR/CasioEmuApp" || echo "ldid thất bại, bỏ qua - Sideloadly vẫn có thể sign"
 
         # Zip thành IPA
         cd "$GITHUB_WORKSPACE"
         zip -r CasioEmu.ipa Payload/
-        echo "✅ Đã tạo IPA"
+        echo "✅ IPA xong"
         ls -lh CasioEmu.ipa
 
-    # ── 7. Upload artifact ──────────────────────────────────────────
+    # ── 8. Upload ───────────────────────────────────────────────────
     - name: Upload IPA
       uses: actions/upload-artifact@v4
       with:
