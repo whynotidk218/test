@@ -74,6 +74,10 @@ target_compile_definitions(CasioEmuApp PRIVATE
     SDL_MAIN_HANDLED  # tránh SDL override main()
 )
 
+set(SDLIMAGE_VENDORED ON)
+set(SDLIMAGE_BACKEND_IMAGEIO OFF)
+set(SDLIMAGE_BACKEND_STB ON)
+
 # ── Liên kết thư viện ─────────────────────────────────────────────
 target_link_libraries(CasioEmuApp PRIVATE
     SDL2::SDL2-static
