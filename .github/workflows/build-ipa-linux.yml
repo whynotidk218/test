@@ -17,67 +17,78 @@ jobs:
       run: |
         sudo apt-get update -qq
         sudo apt-get install -y clang-14 lld-14 cmake ninja-build git curl tar xz-utils zip
-        sudo ln -sf /usr/bin/clang-14   /usr/local/bin/clang
-        sudo ln -sf /usr/bin/clang++-14 /usr/local/bin/clang++
+        sudo ln -sf /usr/bin/clang-14    /usr/local/bin/clang
+        sudo ln -sf /usr/bin/clang++-14  /usr/local/bin/clang++
+        sudo ln -sf /usr/bin/lld-14      /usr/local/bin/lld
+        sudo ln -sf /usr/bin/ld.lld-14   /usr/local/bin/ld.lld
+        # Đảm bảo ld -> lld (không dùng GNU ld)
+        sudo ln -sf /usr/bin/ld.lld-14   /usr/local/bin/ld
 
-    - name: Lấy iOS SDK (sparse-checkout thư mục)
+    - name: Lấy iOS SDK
       run: |
-        # xybp888/iOS-SDKs lưu SDK dưới dạng thư mục thẳng trong repo
-        # sparse-checkout chỉ lấy đúng thư mục iPhoneOS16.5.sdk, không clone cả repo
         git clone --depth=1 --filter=blob:none --sparse \
           https://github.com/xybp888/iOS-SDKs.git /opt/iossdk
         cd /opt/iossdk
         git sparse-checkout set iPhoneOS16.5.sdk
-
         SDK_DIR="/opt/iossdk/iPhoneOS16.5.sdk"
         if [ ! -d "$SDK_DIR" ]; then
-          echo "❌ Không tìm thấy SDK, thư mục hiện có:"
+          echo "Không tìm thấy SDK:"
           ls /opt/iossdk
           exit 1
         fi
         echo "SDK_DIR=$SDK_DIR" >> $GITHUB_ENV
-        echo "✅ SDK: $SDK_DIR"
-        ls "$SDK_DIR" | head -5
+        echo "SDK OK: $SDK_DIR"
 
     - name: Build SDL2
       run: |
-        IOS_FLAGS="--target=arm64-apple-ios14.0 -isysroot ${{ env.SDK_DIR }}"
+        # -fuse-ld=lld: ép clang dùng lld thay GNU ld
+        IOS_FLAGS="--target=arm64-apple-ios14.0 -isysroot ${{ env.SDK_DIR }} -fuse-ld=lld"
         cd SDL && mkdir -p build-ios && cd build-ios
         cmake .. -G Ninja \
-          -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
-          -DCMAKE_C_FLAGS="$IOS_FLAGS" -DCMAKE_CXX_FLAGS="$IOS_FLAGS" \
+          -DCMAKE_C_COMPILER=clang \
+          -DCMAKE_CXX_COMPILER=clang++ \
+          -DCMAKE_C_FLAGS="$IOS_FLAGS" \
+          -DCMAKE_CXX_FLAGS="$IOS_FLAGS" \
           -DCMAKE_EXE_LINKER_FLAGS="$IOS_FLAGS" \
           -DCMAKE_SHARED_LINKER_FLAGS="$IOS_FLAGS" \
-          -DCMAKE_SYSTEM_NAME=Darwin -DCMAKE_SYSTEM_PROCESSOR=arm64 \
+          -DCMAKE_SYSTEM_NAME=Darwin \
+          -DCMAKE_SYSTEM_PROCESSOR=arm64 \
           -DSDL_SHARED=OFF -DSDL_STATIC=ON -DSDL_TEST=OFF \
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_INSTALL_PREFIX=$GITHUB_WORKSPACE/sdl-install
         ninja && ninja install
+        echo "SDL2 OK"
 
     - name: Build SDL2_image
       run: |
-        IOS_FLAGS="--target=arm64-apple-ios14.0 -isysroot ${{ env.SDK_DIR }}"
+        IOS_FLAGS="--target=arm64-apple-ios14.0 -isysroot ${{ env.SDK_DIR }} -fuse-ld=lld"
         cd SDL_image && mkdir -p build-ios && cd build-ios
         cmake .. -G Ninja \
-          -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
-          -DCMAKE_C_FLAGS="$IOS_FLAGS" -DCMAKE_CXX_FLAGS="$IOS_FLAGS" \
-          -DCMAKE_SYSTEM_NAME=Darwin -DCMAKE_SYSTEM_PROCESSOR=arm64 \
+          -DCMAKE_C_COMPILER=clang \
+          -DCMAKE_CXX_COMPILER=clang++ \
+          -DCMAKE_C_FLAGS="$IOS_FLAGS" \
+          -DCMAKE_CXX_FLAGS="$IOS_FLAGS" \
+          -DCMAKE_SYSTEM_NAME=Darwin \
+          -DCMAKE_SYSTEM_PROCESSOR=arm64 \
           -DCMAKE_BUILD_TYPE=Release \
           -DSDL2_DIR=$GITHUB_WORKSPACE/sdl-install/lib/cmake/SDL2 \
           -DCMAKE_INSTALL_PREFIX=$GITHUB_WORKSPACE/sdl-install \
           -DSDL2IMAGE_SAMPLES=OFF -DSDL2IMAGE_TESTS=OFF
         ninja && ninja install
+        echo "SDL2_image OK"
 
     - name: Build CasioEmu
       run: |
-        IOS_FLAGS="--target=arm64-apple-ios14.0 -isysroot ${{ env.SDK_DIR }}"
+        IOS_FLAGS="--target=arm64-apple-ios14.0 -isysroot ${{ env.SDK_DIR }} -fuse-ld=lld"
         mkdir -p build-ios && cd build-ios
         cmake .. -G Ninja \
-          -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+          -DCMAKE_C_COMPILER=clang \
+          -DCMAKE_CXX_COMPILER=clang++ \
           -DCMAKE_C_FLAGS="$IOS_FLAGS" \
           -DCMAKE_CXX_FLAGS="$IOS_FLAGS -std=c++17" \
           -DCMAKE_EXE_LINKER_FLAGS="$IOS_FLAGS -lc++ -lz" \
-          -DCMAKE_SYSTEM_NAME=Darwin -DCMAKE_SYSTEM_PROCESSOR=arm64 \
+          -DCMAKE_SYSTEM_NAME=Darwin \
+          -DCMAKE_SYSTEM_PROCESSOR=arm64 \
           -DCMAKE_BUILD_TYPE=Release -DCASIO_IOS=ON \
           -DSDL2_DIR=$GITHUB_WORKSPACE/sdl-install/lib/cmake/SDL2 \
           -DSDL2_image_DIR=$GITHUB_WORKSPACE/sdl-install/lib/cmake/SDL2_image
