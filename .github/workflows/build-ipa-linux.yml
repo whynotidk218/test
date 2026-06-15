@@ -20,24 +20,24 @@ jobs:
         sudo ln -sf /usr/bin/clang-14   /usr/local/bin/clang
         sudo ln -sf /usr/bin/clang++-14 /usr/local/bin/clang++
 
-    - name: Tải iOS SDK (gh release download)
-      env:
-        GH_TOKEN: ${{ github.token }}
+    - name: Lấy iOS SDK (sparse-checkout thư mục)
       run: |
-        mkdir -p /opt/iossdk
+        # xybp888/iOS-SDKs lưu SDK dưới dạng thư mục thẳng trong repo
+        # sparse-checkout chỉ lấy đúng thư mục iPhoneOS16.5.sdk, không clone cả repo
+        git clone --depth=1 --filter=blob:none --sparse \
+          https://github.com/xybp888/iOS-SDKs.git /opt/iossdk
+        cd /opt/iossdk
+        git sparse-checkout set iPhoneOS16.5.sdk
 
-        # Dùng gh CLI (có sẵn trên ubuntu-22.04) để tải release asset đúng cách
-        gh release download 2023-11-23 \
-          --repo theos/sdks \
-          --pattern "iPhoneOS16.5.sdk.tar.xz" \
-          --dir /tmp/sdk-download
-
-        ls -lh /tmp/sdk-download/
-        tar -xf /tmp/sdk-download/iPhoneOS16.5.sdk.tar.xz -C /opt/iossdk
-
-        SDK_DIR=$(find /opt/iossdk -maxdepth 2 -name "*.sdk" -type d | head -1)
+        SDK_DIR="/opt/iossdk/iPhoneOS16.5.sdk"
+        if [ ! -d "$SDK_DIR" ]; then
+          echo "❌ Không tìm thấy SDK, thư mục hiện có:"
+          ls /opt/iossdk
+          exit 1
+        fi
         echo "SDK_DIR=$SDK_DIR" >> $GITHUB_ENV
         echo "✅ SDK: $SDK_DIR"
+        ls "$SDK_DIR" | head -5
 
     - name: Build SDL2
       run: |
