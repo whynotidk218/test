@@ -1,4 +1,4 @@
-name: Build ios :)
+name: Build and Package iOS IPA
 
 on:
   push:
@@ -12,18 +12,26 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      # 1. Checkout mã nguồn và CHỈ tải các submodule ở tầng gốc (SDL2, SDL2_image...)
-      # Thuộc tính "true" (thay vì recursive) sẽ lấy đủ SDL2 mà không bị treo bởi Sentry.
+      # 1. Checkout mã nguồn chính (Tắt hoàn toàn tự động submodule của GitHub)
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          submodules: true
+          submodules: false
 
-      # 2. Cài đặt CMake
+      # 2. Ép hệ thống tải ĐÚNG các submodule cần thiết bằng lệnh tay
+      # Cách này giúp lấy đủ SDL2, SDL2_image mà không động vào đống file lỗi của sentry
+      - name: Force Fetch Required Submodules
+        run: |
+          git submodule update --init --recursive SDL2
+          git submodule update --init --recursive SDL2_image
+          # Kéo tầng ngoài của sentry-native nếu project yêu cầu (không dùng --recursive ở đây)
+          git submodule update --init sentry-native || true
+
+      # 3. Cài đặt CMake
       - name: Setup CMake
         uses: jwlawson/actions-setup-cmake@v2
 
-      # 3. Tạo file dự án Xcode bằng CMake cho iOS
+      # 4. Cấu hình dự án bằng CMake cho iOS
       - name: Configure CMake for iOS
         run: |
           mkdir build && cd build
@@ -31,23 +39,23 @@ jobs:
             -DCMAKE_SYSTEM_NAME=iOS \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
 
-      # 4. Biên dịch dự án thành file .app (Không cần ký mã - Code Sign)
+      # 5. Biên dịch dự án (Không yêu cầu Code Sign để cài qua TrollStore/AltStore)
       - name: Build Xcode Project
         run: |
           cd build
           xcodebuild -configuration Release -sdk iphoneos ARCHS="arm64" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO ONLY_ACTIVE_ARCH=NO
 
-      # 5. Đóng gói file .app thành file .ipa chuẩn iOS
+      # 6. Tìm và đóng gói chính xác file .app thành file .ipa
       - name: Package .app into .ipa
         run: |
           cd build
           mkdir -p Payload
-          # Tự động tìm và sao chép file .app được sinh ra vào thư mục Payload
-          cp -r Release-iphoneos/*.app Payload/
-          # Nén thư mục Payload thành file .ipa
+          # Tìm file .app vừa build xong và copy vào thư mục Payload
+          find Release-iphoneos -name "*.app" -exec cp -r {} Payload/ \;
+          # Nén lại thành file .ipa hoàn chỉnh
           zip -r CasioEmu.ipa Payload
 
-      # 6. Đẩy file .ipa lên mục Artifacts của GitHub để bạn tải về
+      # 7. Đẩy file lên mục Artifacts để bạn tải về
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
