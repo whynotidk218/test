@@ -40,6 +40,7 @@ jobs:
           --prefix=/usr/local \
           --target=arm-apple-darwin \
           --with-llvm-config=/usr/bin/llvm-config-14 \
+          --without-libdispatch \
           CC=clang-14 CXX=clang++-14
         make -j$(nproc)
         sudo make install
