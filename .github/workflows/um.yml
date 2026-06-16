@@ -175,6 +175,23 @@ jobs:
           cp ios_stubs/SysDialog.cpp CasioEmuMsvc/src/Ext/SysDialog.cpp
           echo "✅ SysDialog replaced with stub"
 
+      
+      - name: Patch StartupUi for iOS
+        run: |
+          echo "🔧 Patching StartupUi.cpp"
+    
+          if [ -f CasioEmuMsvc/src/StartupUi/StartupUi.cpp ]; then
+            sed -i '' \
+            's/bool ok = CreateDesktopShortcut(shortcut_model_path, name_str, icon_str);/bool ok = false;/g' \
+            CasioEmuMsvc/src/StartupUi/StartupUi.cpp
+    
+            echo "✅ StartupUi patched"
+          else
+            echo "⚠️ StartupUi.cpp not found"
+          fi
+
+
+
       - name: Create Info.plist
         run: |
           cat > CasioEmuMsvc/Info.plist << 'EOF'
