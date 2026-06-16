@@ -1,184 +1,123 @@
-name: Build IPA for SlideStore
+name: Build IPA (Fixed)
 
 on:
   push:
-    branches: [ main, master ]
-  workflow_dispatch:
+    branches: [ stable ]       # FIX #3: trigger đúng branch
+  workflow_dispatch:            # vẫn giữ để chạy thủ công
 
 jobs:
   build-ipa:
     runs-on: macos-latest
-    timeout-minutes: 40
-    
+    timeout-minutes: 60
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           submodules: recursive
           fetch-depth: 0
-      
+
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: latest-stable
-      
-      - name: Create missing stub files
+
+      # FIX #1: Tạo AppDelegate.h bị thiếu
+      - name: Create missing AppDelegate.h
         run: |
-          printf "%s\n" "Creating missing stub files..."
-          
-          printf "%s\n" "#import <UIKit/UIKit.h>" > ios/main.m
-          printf "%s\n" "#import \"AppDelegate.h\"" >> ios/main.m
-          printf "%s\n" "" >> ios/main.m
-          printf "%s\n" "int main(int argc, char * argv[]) {" >> ios/main.m
-          printf "%s\n" "    @autoreleasepool {" >> ios/main.m
-          printf "%s\n" "        return UIApplicationMain(argc, argv, nil, NSStringFromClass([AppDelegate class]));" >> ios/main.m
-          printf "%s\n" "    }" >> ios/main.m
-          printf "%s\n" "}" >> ios/main.m
-          
-          printf "%s\n" "#ifdef __APPLE__" > ios_stubs/DiscordRPC_stub.cpp
-          printf "%s\n" "#include <TargetConditionals.h>" >> ios_stubs/DiscordRPC_stub.cpp
-          printf "%s\n" "#if TARGET_OS_IPHONE" >> ios_stubs/DiscordRPC_stub.cpp
-          printf "%s\n" "void Discord_Initialize(const char* applicationId, void* handlers, int autoRegister, const char* optionalSteamId) {}" >> ios_stubs/DiscordRPC_stub.cpp
-          printf "%s\n" "void Discord_Shutdown(void) {}" >> ios_stubs/DiscordRPC_stub.cpp
-          printf "%s\n" "void Discord_RunCallbacks(void) {}" >> ios_stubs/DiscordRPC_stub.cpp
-          printf "%s\n" "void Discord_UpdatePresence(void* presence) {}" >> ios_stubs/DiscordRPC_stub.cpp
-          printf "%s\n" "void Discord_ClearPresence(void) {}" >> ios_stubs/DiscordRPC_stub.cpp
-          printf "%s\n" "void Discord_Respond(const char* userId, int reply) {}" >> ios_stubs/DiscordRPC_stub.cpp
-          printf "%s\n" "#endif" >> ios_stubs/DiscordRPC_stub.cpp
-          printf "%s\n" "#endif" >> ios_stubs/DiscordRPC_stub.cpp
-          
-          printf "%s\n" "#ifdef __APPLE__" > ios_stubs/CrashHandler_stub.cpp
-          printf "%s\n" "#include <TargetConditionals.h>" >> ios_stubs/CrashHandler_stub.cpp
-          printf "%s\n" "#if TARGET_OS_IPHONE" >> ios_stubs/CrashHandler_stub.cpp
-          printf "%s\n" "#include <stdio.h>" >> ios_stubs/CrashHandler_stub.cpp
-          printf "%s\n" "void InitCrashHandler(void) {}" >> ios_stubs/CrashHandler_stub.cpp
-          printf "%s\n" "void ReportCrash(const char* message) { printf(\"Crash: %%s\\n\", message); }" >> ios_stubs/CrashHandler_stub.cpp
-          printf "%s\n" "void SetCrashHandlerPath(const char* path) {}" >> ios_stubs/CrashHandler_stub.cpp
-          printf "%s\n" "#endif" >> ios_stubs/CrashHandler_stub.cpp
-          printf "%s\n" "#endif" >> ios_stubs/CrashHandler_stub.cpp
-          
-          printf "%s\n" "#ifdef __APPLE__" > ios_stubs/Plugin_stub.cpp
-          printf "%s\n" "#include <TargetConditionals.h>" >> ios_stubs/Plugin_stub.cpp
-          printf "%s\n" "#if TARGET_OS_IPHONE" >> ios_stubs/Plugin_stub.cpp
-          printf "%s\n" "#include <stdio.h>" >> ios_stubs/Plugin_stub.cpp
-          printf "%s\n" "class PluginManager {" >> ios_stubs/Plugin_stub.cpp
-          printf "%s\n" "public:" >> ios_stubs/Plugin_stub.cpp
-          printf "%s\n" "    static PluginManager& GetInstance() { static PluginManager instance; return instance; }" >> ios_stubs/Plugin_stub.cpp
-          printf "%s\n" "    void Initialize(void) { printf(\"Plugin system disabled on iOS\\n\"); }" >> ios_stubs/Plugin_stub.cpp
-          printf "%s\n" "    void Shutdown(void) {}" >> ios_stubs/Plugin_stub.cpp
-          printf "%s\n" "    void LoadPlugins(const char* path) {}" >> ios_stubs/Plugin_stub.cpp
-          printf "%s\n" "private:" >> ios_stubs/Plugin_stub.cpp
-          printf "%s\n" "    PluginManager() = default;" >> ios_stubs/Plugin_stub.cpp
-          printf "%s\n" "};" >> ios_stubs/Plugin_stub.cpp
-          printf "%s\n" "extern \"C\" {" >> ios_stubs/Plugin_stub.cpp
-          printf "%s\n" "    void Plugin_Init(void) { PluginManager::GetInstance().Initialize(); }" >> ios_stubs/Plugin_stub.cpp
-          printf "%s\n" "    void Plugin_Shutdown(void) { PluginManager::GetInstance().Shutdown(); }" >> ios_stubs/Plugin_stub.cpp
-          printf "%s\n" "    void Plugin_LoadFromDir(const char* dir) { PluginManager::GetInstance().LoadPlugins(dir); }" >> ios_stubs/Plugin_stub.cpp
-          printf "%s\n" "}" >> ios_stubs/Plugin_stub.cpp
-          printf "%s\n" "#endif" >> ios_stubs/Plugin_stub.cpp
-          printf "%s\n" "#endif" >> ios_stubs/Plugin_stub.cpp
-          
-          printf "%s\n" "Stub files created"
-      
+          cat > ios/AppDelegate.h << 'EOF'
+          #import <UIKit/UIKit.h>
+
+          @interface AppDelegate : UIResponder <UIApplicationDelegate>
+          @property (strong, nonatomic) UIWindow *window;
+          @end
+          EOF
+          echo "AppDelegate.h created"
+
+      - name: Create stub files
+        run: |
+          # DiscordRPC stub
+          cat > ios_stubs/DiscordRPC_stub.cpp << 'EOF'
+          #ifdef __APPLE__
+          #include <TargetConditionals.h>
+          #if TARGET_OS_IPHONE
+          void Discord_Initialize(const char*, void*, int, const char*) {}
+          void Discord_Shutdown(void) {}
+          void Discord_RunCallbacks(void) {}
+          void Discord_UpdatePresence(void*) {}
+          void Discord_ClearPresence(void) {}
+          void Discord_Respond(const char*, int) {}
+          #endif
+          #endif
+          EOF
+
+          # CrashHandler stub
+          cat > ios_stubs/CrashHandler_stub.cpp << 'EOF'
+          #ifdef __APPLE__
+          #include <TargetConditionals.h>
+          #if TARGET_OS_IPHONE
+          #include <stdio.h>
+          void InitCrashHandler(void) {}
+          void ReportCrash(const char* msg) { printf("Crash: %s\n", msg); }
+          void SetCrashHandlerPath(const char*) {}
+          #endif
+          #endif
+          EOF
+
+          # Plugin stub
+          cat > ios_stubs/Plugin_stub.cpp << 'EOF'
+          #ifdef __APPLE__
+          #include <TargetConditionals.h>
+          #if TARGET_OS_IPHONE
+          #include <stdio.h>
+          extern "C" {
+              void Plugin_Init(void) { printf("Plugin system disabled on iOS\n"); }
+              void Plugin_Shutdown(void) {}
+              void Plugin_LoadFromDir(const char*) {}
+          }
+          #endif
+          #endif
+          EOF
+
+          echo "Stub files created"
+
       - name: Create SDL2 symlinks
         run: |
-          printf "%s\n" "Creating SDL2 symlinks..."
-          
           if [ -d "SDL" ] && [ ! -d "SDL2" ]; then
             ln -s SDL SDL2
-            printf "%s\n" "Created symlink: SDL2 -> SDL"
+            echo "Created symlink: SDL2 -> SDL"
           fi
-          
           if [ -d "SDL_image" ] && [ ! -d "SDL2_image" ]; then
             ln -s SDL_image SDL2_image
-            printf "%s\n" "Created symlink: SDL2_image -> SDL_image"
+            echo "Created symlink: SDL2_image -> SDL_image"
           fi
-          
-          printf "%s\n" "SDL directories:"
-          ls -la | grep -E "SDL"
-      
-      - name: Create Info.plist
+          ls -la | grep SDL
+
+      - name: Build iOS app with CMake + Xcode
         run: |
-          printf "%s\n" "Creating Info.plist..."
-          
-          printf "%s\n" "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" > CasioEmuMsvc/Info.plist
-          printf "%s\n" "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "<plist version=\"1.0\">" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "<dict>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "    <key>CFBundleDevelopmentRegion</key>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "    <string>en</string>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "    <key>CFBundleExecutable</key>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "    <string>CasioEmuApp</string>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "    <key>CFBundleIdentifier</key>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "    <string>com.casioemu.ios</string>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "    <key>CFBundleInfoDictionaryVersion</key>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "    <string>6.0</string>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "    <key>CFBundleName</key>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "    <string>CasioEmu</string>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "    <key>CFBundlePackageType</key>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "    <string>APPL</string>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "    <key>CFBundleShortVersionString</key>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "    <string>1.0</string>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "    <key>CFBundleVersion</key>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "    <string>1</string>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "    <key>LSRequiresIPhoneOS</key>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "    <true/>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "    <key>UIDeviceFamily</key>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "    <array>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "        <integer>1</integer>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "        <integer>2</integer>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "    </array>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "    <key>UISupportedInterfaceOrientations</key>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "    <array>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "        <string>UIInterfaceOrientationPortrait</string>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "        <string>UIInterfaceOrientationLandscapeLeft</string>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "        <string>UIInterfaceOrientationLandscapeRight</string>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "    </array>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "    <key>UIRequiredDeviceCapabilities</key>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "    <array>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "        <string>armv7</string>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "    </array>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "</dict>" >> CasioEmuMsvc/Info.plist
-          printf "%s\n" "</plist>" >> CasioEmuMsvc/Info.plist
-          
-          printf "%s\n" "Info.plist created"
-      
-      - name: Build iOS app
-        run: |
-          printf "%s\n" "Building iOS app..."
-          
           mkdir -p build-ios
           cd build-ios
-          
-          printf "%s\n" "Running CMake..."
+
           cmake .. \
             -G Xcode \
             -DCMAKE_SYSTEM_NAME=iOS \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
             -DIOS=ON
-          
-          printf "%s\n" "Finding Xcode project..."
-          PROJECT_FILE=$(find . -maxdepth 1 -name "*.xcodeproj" -type d | head -n 1 | sed 's|^\./||')
-          
+
+          # Lấy tên scheme đầu tiên
+          PROJECT_FILE=$(find . -maxdepth 1 -name "*.xcodeproj" -type d | head -1 | sed 's|^\./||')
           if [ -z "$PROJECT_FILE" ]; then
-            printf "%s\n" "ERROR: No Xcode project found"
+            echo "ERROR: No .xcodeproj found"
             ls -la
             exit 1
           fi
-          
-          printf "%s\n" "Found project: $PROJECT_FILE"
-          
-          printf "%s\n" "Getting scheme name..."
-          SCHEME=$(xcodebuild -project "$PROJECT_FILE" -list 2>/dev/null | grep -A 1 "Schemes:" | tail -n 1 | xargs)
-          
-          if [ -z "$SCHEME" ]; then
-            printf "%s\n" "Using default scheme: CasioEmuApp"
-            SCHEME="CasioEmuApp"
-          fi
-          
-          printf "%s\n" "Using scheme: $SCHEME"
-          
-          printf "%s\n" "Building project..."
+          echo "Project: $PROJECT_FILE"
+
+          SCHEME=$(xcodebuild -project "$PROJECT_FILE" -list 2>/dev/null \
+            | awk '/Schemes:/{found=1; next} found && NF{print $1; exit}')
+          [ -z "$SCHEME" ] && SCHEME="CasioEmuApp"
+          echo "Scheme: $SCHEME"
+
           xcodebuild \
             -project "$PROJECT_FILE" \
             -scheme "$SCHEME" \
@@ -190,41 +129,28 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             ONLY_ACTIVE_ARCH=NO \
             build
-          
-          cd ..
-      
-      - name: Find and package app
+
+      - name: Package IPA
         run: |
-          printf "%s\n" "Looking for built app..."
-          
-          APP_PATH=$(find build-ios -name "*.app" -type d | head -n 1)
-          
+          APP_PATH=$(find build-ios -name "*.app" -type d | head -1)
           if [ -z "$APP_PATH" ]; then
-            printf "%s\n" "ERROR: No .app found"
+            echo "ERROR: No .app found"
+            find build-ios -type d | head -30
             exit 1
           fi
-          
-          printf "%s\n" "Found app at: $APP_PATH"
+          echo "Found app: $APP_PATH"
+
           mkdir -p Payload
           cp -r "$APP_PATH" Payload/
-          printf "%s\n" "App copied to Payload/"
-      
-      - name: Create IPA
-        run: |
-          printf "%s\n" "Creating IPA file..."
-          
-          cd Payload
-          zip -r ../CasioEmuMsvc.ipa * -q
-          cd ..
-          
-          printf "%s\n" "IPA created successfully!"
-          printf "%s\n" "File: CasioEmuMsvc.ipa"
-          printf "%s\n" "Size: %s" "$(ls -lh CasioEmuMsvc.ipa | awk '{print $5}')"
-      
-      - name: Upload IPA
+
+          # FIX #2: zip từ ngoài để giữ đúng cấu trúc Payload/App.app
+          zip -r CasioEmuMsvc.ipa Payload/
+          echo "IPA size: $(ls -lh CasioEmuMsvc.ipa | awk '{print $5}')"
+
+      - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CasioEmuMsvc-SlideStore
+          name: CasioEmuMsvc-iOS
           path: CasioEmuMsvc.ipa
           compression-level: 0
           if-no-files-found: error
