@@ -1,4 +1,4 @@
-name: Build iOS IPA & Upload to App Store
+name: Build iOS IPA 
 
 on:
   push:
