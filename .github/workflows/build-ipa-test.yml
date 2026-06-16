@@ -47,6 +47,21 @@ jobs:
           fi
           
           printf "%s\n" "Submodules fixed"
+          
+          # Fix SDL folder names
+          printf "%s\n" "Creating SDL2 symlinks..."
+          if [ -d "SDL" ] && [ ! -d "SDL2" ]; then
+            ln -s SDL SDL2
+            printf "%s\n" "Created symlink: SDL2 -> SDL"
+          fi
+          
+          if [ -d "SDL_image" ] && [ ! -d "SDL2_image" ]; then
+            ln -s SDL_image SDL2_image
+            printf "%s\n" "Created symlink: SDL2_image -> SDL_image"
+          fi
+          
+          printf "%s\n" "SDL directories:"
+          ls -la | grep -E "SDL"
       
       - name: Create Info.plist
         run: |
@@ -89,24 +104,7 @@ jobs:
           printf "%s\n" "</dict>" >> ios/Info.plist
           printf "%s\n" "</plist>" >> ios/Info.plist
           
-          printf "%s\n" "Info.plist created at ios/Info.plist"
-      
-      - name: Create entitlements
-        run: |
-          printf "%s\n" "Creating entitlements.plist..."
-          
-          printf "%s\n" "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" > entitlements.plist
-          printf "%s\n" "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">" >> entitlements.plist
-          printf "%s\n" "<plist version=\"1.0\">" >> entitlements.plist
-          printf "%s\n" "<dict>" >> entitlements.plist
-          printf "%s\n" "    <key>get-task-allow</key>" >> entitlements.plist
-          printf "%s\n" "    <true/>" >> entitlements.plist
-          printf "%s\n" "    <key>com.apple.security.cs.disable-library-validation</key>" >> entitlements.plist
-          printf "%s\n" "    <true/>" >> entitlements.plist
-          printf "%s\n" "</dict>" >> entitlements.plist
-          printf "%s\n" "</plist>" >> entitlements.plist
-          
-          printf "%s\n" "entitlements.plist created"
+          printf "%s\n" "Info.plist created"
       
       - name: Build for iOS unsigned
         run: |
@@ -157,14 +155,11 @@ jobs:
             mkdir -p Payload
             cp -r "$APP_PATH" Payload/
             printf "%s\n" "App copied to Payload/"
-            
-            ls -la Payload/
           else
             printf "%s\n" "WARNING: No .app found, creating stub app..."
             
             mkdir -p Payload/CasioEmuMsvc.app
-            
-            cp ios/Info.plist Payload/CasioEmuMsvc.app/ 2>/dev/null || printf "%s\n" "No Info.plist to copy"
+            cp ios/Info.plist Payload/CasioEmuMsvc.app/
             
             printf "%s\n" "#!/bin/bash" > Payload/CasioEmuMsvc.app/CasioEmuMsvc
             printf "%s\n" "echo 'CasioEmuMsvc - iOS Emulator'" >> Payload/CasioEmuMsvc.app/CasioEmuMsvc
@@ -172,8 +167,6 @@ jobs:
             printf "%s\n" "exit 0" >> Payload/CasioEmuMsvc.app/CasioEmuMsvc
             
             chmod +x Payload/CasioEmuMsvc.app/CasioEmuMsvc
-            
-            printf "%s\n" "Stub app created"
           fi
       
       - name: Create IPA
@@ -188,24 +181,8 @@ jobs:
             printf "%s\n" "✅ IPA created successfully!"
             printf "%s\n" "File: CasioEmuMsvc.ipa"
             printf "%s\n" "Size: %s" "$(ls -lh CasioEmuMsvc.ipa | awk '{print $5}')"
-            printf "%s\n" "Bundle ID: com.casioemu.ios"
-            printf "%s\n" ""
-            printf "%s\n" "Ready for SlideStore signing!"
           else
             printf "%s\n" "❌ Failed: Payload directory not found"
-            exit 1
-          fi
-      
-      - name: Verify IPA
-        run: |
-          printf "%s\n" "Verifying IPA..."
-          
-          if [ -f "CasioEmuMsvc.ipa" ]; then
-            printf "%s\n" "✅ IPA file exists"
-            file CasioEmuMsvc.ipa
-            unzip -l CasioEmuMsvc.ipa | head -20
-          else
-            printf "%s\n" "❌ IPA file not found"
             exit 1
           fi
       
@@ -216,17 +193,3 @@ jobs:
           path: CasioEmuMsvc.ipa
           compression-level: 0
           if-no-files-found: error
-      
-      - name: Upload debug info
-        if: failure()
-        run: |
-          printf "%s\n" "Collecting debug information..."
-          
-          printf "%s\n" "=== Build logs ==="
-          cat build-ios/build.log 2>/dev/null | tail -50 || printf "%s\n" "No build log"
-          
-          printf "%s\n" "=== Directory structure ==="
-          ls -la build-ios/ 2>/dev/null || printf "%s\n" "No build-ios directory"
-          
-          printf "%s\n" "=== Xcode projects ==="
-          find . -name "*.xcodeproj" -type d
