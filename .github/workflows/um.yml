@@ -24,7 +24,6 @@ jobs:
           git submodule status
           git submodule update --init --recursive --force
 
-          # Kiểm tra các thư mục tồn tại
           if [ ! -d SDL/CMakeLists.txt ]; then
             echo "⚠️ SDL submodule incomplete, re-initializing..."
             rm -rf SDL
@@ -37,11 +36,13 @@ jobs:
           fi
           echo "✓ Submodules validated"
 
-      - name: Create symlinks for SDL2 (compatibility)
+      - name: Create symlinks for SDL2 compatibility (root level)
         run: |
-          ln -sf ../SDL CasioEmuMsvc/SDL2
-          ln -sf ../SDL_image CasioEmuMsvc/SDL2_image
-          ls -la CasioEmuMsvc/ | grep SDL   # Debug: kiểm tra symlink
+          # Tạo symlink ở thư mục gốc để CMake trong CasioEmuMsvc thấy ../SDL2
+          ln -sf SDL SDL2
+          ln -sf SDL_image SDL2_image
+          echo "Symlinks created:"
+          ls -la | grep SDL
 
       - name: Install iOS CMake toolchain
         run: |
