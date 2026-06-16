@@ -111,9 +111,39 @@ jobs:
           
           printf "%s\n" "main.m created"
       
-      - name: Create CMakeLists.txt with proper asmjit paths
+      - name: Fix asmjit for iOS - add sys_icache_invalidate stub
         run: |
-          printf "%s\n" "Creating CMakeLists.txt with fixed include paths..."
+          printf "%s\n" "Fixing asmjit for iOS..."
+          
+          # Tạo header patch để định nghĩa sys_icache_invalidate cho iOS
+          cat > CasioEmuMsvc/third_party/asmjit/asmjit/core/ios_fix.h << 'EOF'
+#ifndef ASMJIT_IOS_FIX_H
+#define ASMJIT_IOS_FIX_H
+
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#if TARGET_OS_IPHONE
+#include <libkern/OSCacheControl.h>
+
+static inline void sys_icache_invalidate(void *start, size_t len) {
+    sys_icache_invalidate(start, len);
+}
+#endif
+#endif
+
+#endif
+EOF
+          
+          # Patch virtmem.cpp để include fix
+          sed -i '' '1i\
+#include "ios_fix.h"\
+' CasioEmuMsvc/third_party/asmjit/asmjit/core/virtmem.cpp 2>/dev/null || true
+          
+          printf "%s\n" "asMJit iOS fix applied"
+      
+      - name: Create CMakeLists.txt
+        run: |
+          printf "%s\n" "Creating CMakeLists.txt..."
           
           printf "%s\n" "cmake_minimum_required(VERSION 3.15)" > CMakeLists.txt
           printf "%s\n" "project(CasioEmuMsvc VERSION 1.0 LANGUAGES C CXX OBJC)" >> CMakeLists.txt
@@ -123,8 +153,11 @@ jobs:
           printf "%s\n" "set(CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED \"NO\")" >> CMakeLists.txt
           printf "%s\n" "set(CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED \"NO\")" >> CMakeLists.txt
           printf "%s\n" "" >> CMakeLists.txt
-          printf "%s\n" "# Add asmjit subdirectory first" >> CMakeLists.txt
+          printf "%s\n" "# Add asmjit subdirectory" >> CMakeLists.txt
           printf "%s\n" "add_subdirectory(CasioEmuMsvc/third_party/asmjit)" >> CMakeLists.txt
+          printf "%s\n" "" >> CMakeLists.txt
+          printf "%s\n" "# Add compile definitions for iOS" >> CMakeLists.txt
+          printf "%s\n" "add_definitions(-D__APPLE__=1 -DTARGET_OS_IPHONE=1)" >> CMakeLists.txt
           printf "%s\n" "" >> CMakeLists.txt
           printf "%s\n" "file(GLOB_RECURSE EMULATOR_SOURCES" >> CMakeLists.txt
           printf "%s\n" "    \"CasioEmuMsvc/*.cpp\"" >> CMakeLists.txt
@@ -146,7 +179,6 @@ jobs:
           printf "%s\n" "    \${EMULATOR_HEADERS}" >> CMakeLists.txt
           printf "%s\n" ")" >> CMakeLists.txt
           printf "%s\n" "" >> CMakeLists.txt
-          printf "%s\n" "# Add include directories" >> CMakeLists.txt
           printf "%s\n" "target_include_directories(CasioEmuMsvc PRIVATE" >> CMakeLists.txt
           printf "%s\n" "    \${CMAKE_CURRENT_SOURCE_DIR}" >> CMakeLists.txt
           printf "%s\n" "    \${CMAKE_CURRENT_SOURCE_DIR}/CasioEmuMsvc" >> CMakeLists.txt
@@ -156,10 +188,8 @@ jobs:
           printf "%s\n" "    \${CMAKE_CURRENT_SOURCE_DIR}/CasioEmuMsvc/third_party/asmjit/asmjit/x86" >> CMakeLists.txt
           printf "%s\n" ")" >> CMakeLists.txt
           printf "%s\n" "" >> CMakeLists.txt
-          printf "%s\n" "# Link asmjit static library" >> CMakeLists.txt
           printf "%s\n" "target_link_libraries(CasioEmuMsvc asmjit)" >> CMakeLists.txt
           printf "%s\n" "" >> CMakeLists.txt
-          printf "%s\n" "# iOS frameworks" >> CMakeLists.txt
           printf "%s\n" "find_library(UIKIT_LIBRARY UIKit REQUIRED)" >> CMakeLists.txt
           printf "%s\n" "find_library(FOUNDATION_LIBRARY Foundation REQUIRED)" >> CMakeLists.txt
           printf "%s\n" "find_library(OPENGLES_LIBRARY OpenGLES REQUIRED)" >> CMakeLists.txt
