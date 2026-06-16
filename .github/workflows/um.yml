@@ -1,4 +1,4 @@
-name: Build iOS IPA (again)
+name: Build iOS IPA (Local Repo Resource)
 
 on:
   push:
@@ -21,7 +21,6 @@ jobs:
       - name: Validate and fix submodules
         run: |
           git submodule update --init --recursive --force
-          # Tạo liên kết thư mục để các lệnh gọi include không bị lỗi
           ln -sf SDL SDL2
           ln -sf SDL_image SDL2_image
 
@@ -37,7 +36,6 @@ jobs:
         run: |
           mkdir -p ios_build/Payload/CasioEmu.app
           
-          # Cấu hình Info.plist tích hợp tính năng File Sharing để nạp ROM sau này
           cat > ios_build/Payload/CasioEmu.app/Info.plist << 'EOF'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -80,33 +78,11 @@ jobs:
           </plist>
           EOF
 
-      - name: Gather Local Repo Resources
+      - name: Create Mocks for Desktop Features
         run: |
-          cd ios_build
-          echo "🔍 Đang rà soát và lấy file nguồn trực tiếp từ repo..."
-          
-          # Tìm tất cả file .cpp trong thư mục src ở gốc repo của bạn
-          if [ -d "../src" ]; then
-            find ../src -name "*.cpp" ! -name "*Win32*" ! -name "*Linux*" ! -name "*SysDialog.cpp*" > sources.txt
-          elif [ -d "../CasioEmuMsvc/src" ]; then
-            find ../CasioEmuMsvc/src -name "*.cpp" ! -name "*Win32*" ! -name "*Linux*" ! -name "*SysDialog.cpp*" > sources.txt
-          else
-            # Nếu để code ngay ngoài thư mục gốc
-            find .. -maxdepth 2 -name "*.cpp" ! -name "*Win32*" ! -name "*Linux*" > sources.txt
-          fi
-          
-          # Lấy tài nguyên từ thư viện SDL2 đi kèm repo
-          if [ -d "../SDL/src" ]; then
-            find ../SDL/src -name "*.c" ! -name "*windows*" ! -name "*android*" ! -name "*linux*" ! -name "*winrt*" >> sources.txt
-          fi
-          
-          # Lấy tài nguyên từ thư viện SDL_image đi kèm repo
-          if [ -d "../SDL_image/src" ]; then
-            find ../SDL_image/src -name "*.c" >> sources.txt
-          fi
-
-          # Tạo file mock SysDialog để tránh lỗi thiếu thư viện giao diện máy tính
-          cat > SysDialog_mock.cpp << 'EOF'
+          mkdir -p ios_build
+          # Tạo file mock thay thế các tính năng gây lỗi biên dịch hoặc không tương thích iOS
+          cat > ios_build/SysDialog_mock.cpp << 'EOF'
           #include <string>
           class SysDialog {
           public:
@@ -116,42 +92,57 @@ jobs:
               static bool ShowFolderDialog(const std::string& t, std::string& o) { return false; }
           };
           EOF
-          echo "SysDialog_mock.cpp" >> sources.txt
-          
-          echo "📊 Danh sách file thu thập được để chế tạo:"
-          cat sources.txt
 
-      - name: Compile and Link From List
+      - name: Compile and Link Real-time
         run: |
           cd ios_build
           
-          # Xác định đường dẫn include đúng dựa vào cấu trúc repo
-          INCLUDES="-I../SDL/include -I../SDL_image"
-          if [ -d "../src" ]; then INCLUDES="$INCLUDES -I../src"; fi
-          if [ -d "../CasioEmuMsvc/src" ]; then INCLUDES="$INCLUDES -I../CasioEmuMsvc/src"; fi
+          echo "🔍 Quét và nạp danh sách tài nguyên file..."
+          # Tìm các file nguồn hợp lệ, chủ động loại bỏ các file chạy nền desktop độc quyền gây crash/lỗi link
+          SRC_DIR="../CasioEmuMsvc/src"
+          if [ -d "../src" ]; then SRC_DIR="../src"; fi
           
-          echo "🚀 Kích hoạt Clang biên dịch trực tiếp danh sách tài nguyên..."
+          # Gom file C++ của giả lập (Bỏ qua các file lỗi hệ thống nền web/discord/windows)
+          FILES_TO_COMPILE=$(find "$SRC_DIR" -name "*.cpp" ! -name "*Win32*" ! -name "*Linux*" ! -name "*SysDialog.cpp*" ! -name "*DiscordRPC.cpp*" ! -name "*CrashHandler.cpp*" ! -name "*web_main.cpp*" ! -name "*core_api.cpp*")
+          
+          # Gom thêm file C của SDL2 và SDL_image
+          if [ -d "../SDL/src" ]; then
+            FILES_TO_COMPILE="$FILES_TO_COMPILE $(find ../SDL/src -name "*.c" ! -name "*windows*" ! -name "*android*" ! -name "*linux*" ! -name "*winrt*")"
+          fi
+          if [ -d "../SDL_image/src" ]; then
+            FILES_TO_COMPILE="$FILES_TO_COMPILE $(find ../SDL_image/src -name "*.c")"
+          fi
+          
+          # Đính kèm file mock chúng ta vừa viết
+          FILES_TO_COMPILE="$FILES_TO_COMPILE SysDialog_mock.cpp"
+          
+          echo "📊 Tổng số lượng file đưa vào chế tạo: $(echo $FILES_TO_COMPILE | wc -w)"
+
+          # Thiết lập cấu hình include đường dẫn thư viện
+          INCLUDES="-I../SDL/include -I../SDL_image -I$SRC_DIR"
+          
+          echo "🚀 Ép biên dịch trực tiếp (Không qua filelist trung gian)..."
           xcrun -sdk iphoneos clang++ -arch arm64 -miphoneos-version-min=13.0 \
             -isysroot $(xcrun -sdk iphoneos --show-sdk-path) \
             $INCLUDES \
             -D__IPHONEOS__ -D__APPLE__ -DSDL_VIDEO_DRIVER_UIKIT=1 \
             -std=c++17 -O2 \
-            -filelist sources.txt \
+            $FILES_TO_COMPILE \
             -framework UIKit -framework Foundation -framework CoreGraphics -framework QuartzCore -framework OpenGLES -framework AudioToolbox -framework CoreAudio -framework AVFoundation -framework GameController -framework CoreMotion \
             -o Payload/CasioEmu.app/CasioEmu
 
       - name: Finalize and Package IPA
         run: |
           cd ios_build
-          echo "📊 Kích thước file thực thi sau khi chế tạo:"
-          ls -lh Payload/CasioEmu.app/CasioEmu || echo "⚠️ Không tìm thấy file thực thi!"
+          echo "📊 Kích thước file thực thi sau khi chế tạo hoàn chỉnh:"
+          ls -lh Payload/CasioEmu.app/CasioEmu || echo "⚠️ Cảnh báo: Build lỗi!"
           
-          echo "🗜️ Đóng gói thành tệp cài đặt định dạng .ipa..."
+          echo "🗜️ Đóng gói Payload thành .ipa..."
           zip -r ../CasioEmuMsvc.ipa Payload/
 
       - name: Upload Finished IPA
         uses: actions/upload-artifact@v4
         with:
-          name: CasioEmu-RepoResource
+          name: CasioEmu-FixedLinker
           path: CasioEmuMsvc.ipa
           retention-days: 7
