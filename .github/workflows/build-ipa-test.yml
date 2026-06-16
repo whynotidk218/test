@@ -111,35 +111,27 @@ jobs:
           
           printf "%s\n" "main.m created"
       
-      - name: Fix asmjit for iOS - add sys_icache_invalidate stub
+      - name: Fix asmjit for iOS
         run: |
           printf "%s\n" "Fixing asmjit for iOS..."
           
-          # Tạo header patch để định nghĩa sys_icache_invalidate cho iOS
-          cat > CasioEmuMsvc/third_party/asmjit/asmjit/core/ios_fix.h << 'EOF'
-#ifndef ASMJIT_IOS_FIX_H
-#define ASMJIT_IOS_FIX_H
-
-#ifdef __APPLE__
-#include <TargetConditionals.h>
-#if TARGET_OS_IPHONE
-#include <libkern/OSCacheControl.h>
-
-static inline void sys_icache_invalidate(void *start, size_t len) {
-    sys_icache_invalidate(start, len);
-}
-#endif
-#endif
-
-#endif
-EOF
+          printf "%s\n" "#ifndef ASMJIT_IOS_FIX_H" > CasioEmuMsvc/third_party/asmjit/asmjit/core/ios_fix.h
+          printf "%s\n" "#define ASMJIT_IOS_FIX_H" >> CasioEmuMsvc/third_party/asmjit/asmjit/core/ios_fix.h
+          printf "%s\n" "" >> CasioEmuMsvc/third_party/asmjit/asmjit/core/ios_fix.h
+          printf "%s\n" "#ifdef __APPLE__" >> CasioEmuMsvc/third_party/asmjit/asmjit/core/ios_fix.h
+          printf "%s\n" "#include <TargetConditionals.h>" >> CasioEmuMsvc/third_party/asmjit/asmjit/core/ios_fix.h
+          printf "%s\n" "#if TARGET_OS_IPHONE" >> CasioEmuMsvc/third_party/asmjit/asmjit/core/ios_fix.h
+          printf "%s\n" "#include <libkern/OSCacheControl.h>" >> CasioEmuMsvc/third_party/asmjit/asmjit/core/ios_fix.h
+          printf "%s\n" "" >> CasioEmuMsvc/third_party/asmjit/asmjit/core/ios_fix.h
+          printf "%s\n" "#endif" >> CasioEmuMsvc/third_party/asmjit/asmjit/core/ios_fix.h
+          printf "%s\n" "#endif" >> CasioEmuMsvc/third_party/asmjit/asmjit/core/ios_fix.h
+          printf "%s\n" "#endif" >> CasioEmuMsvc/third_party/asmjit/asmjit/core/ios_fix.h
           
-          # Patch virtmem.cpp để include fix
-          sed -i '' '1i\
-#include "ios_fix.h"\
-' CasioEmuMsvc/third_party/asmjit/asmjit/core/virtmem.cpp 2>/dev/null || true
+          printf "%s\n" "#include \"ios_fix.h\"" > /tmp/virtmem_temp.txt
+          cat CasioEmuMsvc/third_party/asmjit/asmjit/core/virtmem.cpp >> /tmp/virtmem_temp.txt
+          cp /tmp/virtmem_temp.txt CasioEmuMsvc/third_party/asmjit/asmjit/core/virtmem.cpp
           
-          printf "%s\n" "asMJit iOS fix applied"
+          printf "%s\n" "asmjit iOS fix applied"
       
       - name: Create CMakeLists.txt
         run: |
@@ -153,10 +145,8 @@ EOF
           printf "%s\n" "set(CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED \"NO\")" >> CMakeLists.txt
           printf "%s\n" "set(CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED \"NO\")" >> CMakeLists.txt
           printf "%s\n" "" >> CMakeLists.txt
-          printf "%s\n" "# Add asmjit subdirectory" >> CMakeLists.txt
           printf "%s\n" "add_subdirectory(CasioEmuMsvc/third_party/asmjit)" >> CMakeLists.txt
           printf "%s\n" "" >> CMakeLists.txt
-          printf "%s\n" "# Add compile definitions for iOS" >> CMakeLists.txt
           printf "%s\n" "add_definitions(-D__APPLE__=1 -DTARGET_OS_IPHONE=1)" >> CMakeLists.txt
           printf "%s\n" "" >> CMakeLists.txt
           printf "%s\n" "file(GLOB_RECURSE EMULATOR_SOURCES" >> CMakeLists.txt
