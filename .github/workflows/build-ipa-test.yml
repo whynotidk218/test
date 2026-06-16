@@ -26,69 +26,57 @@ jobs:
         run: |
           printf "%s\n" "Creating missing stub files..."
           
-          # Tạo main.m
-          cat > ios/main.m << 'EOF'
-#import <UIKit/UIKit.h>
-#import "AppDelegate.h"
-
-int main(int argc, char * argv[]) {
-    @autoreleasepool {
-        return UIApplicationMain(argc, argv, nil, NSStringFromClass([AppDelegate class]));
-    }
-}
-EOF
+          printf "%s\n" "#import <UIKit/UIKit.h>" > ios/main.m
+          printf "%s\n" "#import \"AppDelegate.h\"" >> ios/main.m
+          printf "%s\n" "" >> ios/main.m
+          printf "%s\n" "int main(int argc, char * argv[]) {" >> ios/main.m
+          printf "%s\n" "    @autoreleasepool {" >> ios/main.m
+          printf "%s\n" "        return UIApplicationMain(argc, argv, nil, NSStringFromClass([AppDelegate class]));" >> ios/main.m
+          printf "%s\n" "    }" >> ios/main.m
+          printf "%s\n" "}" >> ios/main.m
           
-          # Tạo DiscordRPC_stub.cpp
-          cat > ios_stubs/DiscordRPC_stub.cpp << 'EOF'
-#ifdef __APPLE__
-#include <TargetConditionals.h>
-#if TARGET_OS_IPHONE
-void Discord_Initialize(const char* applicationId, void* handlers, int autoRegister, const char* optionalSteamId) {}
-void Discord_Shutdown(void) {}
-void Discord_RunCallbacks(void) {}
-void Discord_UpdatePresence(void* presence) {}
-void Discord_ClearPresence(void) {}
-void Discord_Respond(const char* userId, int reply) {}
-#endif
-#endif
-EOF
+          printf "%s\n" "#ifdef __APPLE__" > ios_stubs/DiscordRPC_stub.cpp
+          printf "%s\n" "#include <TargetConditionals.h>" >> ios_stubs/DiscordRPC_stub.cpp
+          printf "%s\n" "#if TARGET_OS_IPHONE" >> ios_stubs/DiscordRPC_stub.cpp
+          printf "%s\n" "void Discord_Initialize(const char* applicationId, void* handlers, int autoRegister, const char* optionalSteamId) {}" >> ios_stubs/DiscordRPC_stub.cpp
+          printf "%s\n" "void Discord_Shutdown(void) {}" >> ios_stubs/DiscordRPC_stub.cpp
+          printf "%s\n" "void Discord_RunCallbacks(void) {}" >> ios_stubs/DiscordRPC_stub.cpp
+          printf "%s\n" "void Discord_UpdatePresence(void* presence) {}" >> ios_stubs/DiscordRPC_stub.cpp
+          printf "%s\n" "void Discord_ClearPresence(void) {}" >> ios_stubs/DiscordRPC_stub.cpp
+          printf "%s\n" "void Discord_Respond(const char* userId, int reply) {}" >> ios_stubs/DiscordRPC_stub.cpp
+          printf "%s\n" "#endif" >> ios_stubs/DiscordRPC_stub.cpp
+          printf "%s\n" "#endif" >> ios_stubs/DiscordRPC_stub.cpp
           
-          # Tạo CrashHandler_stub.cpp
-          cat > ios_stubs/CrashHandler_stub.cpp << 'EOF'
-#ifdef __APPLE__
-#include <TargetConditionals.h>
-#if TARGET_OS_IPHONE
-#include <stdio.h>
-void InitCrashHandler(void) {}
-void ReportCrash(const char* message) { printf("Crash: %s\n", message); }
-void SetCrashHandlerPath(const char* path) {}
-#endif
-#endif
-EOF
+          printf "%s\n" "#ifdef __APPLE__" > ios_stubs/CrashHandler_stub.cpp
+          printf "%s\n" "#include <TargetConditionals.h>" >> ios_stubs/CrashHandler_stub.cpp
+          printf "%s\n" "#if TARGET_OS_IPHONE" >> ios_stubs/CrashHandler_stub.cpp
+          printf "%s\n" "#include <stdio.h>" >> ios_stubs/CrashHandler_stub.cpp
+          printf "%s\n" "void InitCrashHandler(void) {}" >> ios_stubs/CrashHandler_stub.cpp
+          printf "%s\n" "void ReportCrash(const char* message) { printf(\"Crash: %%s\\n\", message); }" >> ios_stubs/CrashHandler_stub.cpp
+          printf "%s\n" "void SetCrashHandlerPath(const char* path) {}" >> ios_stubs/CrashHandler_stub.cpp
+          printf "%s\n" "#endif" >> ios_stubs/CrashHandler_stub.cpp
+          printf "%s\n" "#endif" >> ios_stubs/CrashHandler_stub.cpp
           
-          # Tạo Plugin_stub.cpp
-          cat > ios_stubs/Plugin_stub.cpp << 'EOF'
-#ifdef __APPLE__
-#include <TargetConditionals.h>
-#if TARGET_OS_IPHONE
-#include <stdio.h>
-class PluginManager {
-public:
-    static PluginManager& GetInstance() { static PluginManager instance; return instance; }
-    void Initialize(void) { printf("Plugin system disabled on iOS\n"); }
-    void Shutdown(void) {}
-    void LoadPlugins(const char* path) {}
-private:
-    PluginManager() = default;
-};
-extern "C" {
-    void Plugin_Init(void) { PluginManager::GetInstance().Initialize(); }
-    void Plugin_Shutdown(void) { PluginManager::GetInstance().Shutdown(); }
-    void Plugin_LoadFromDir(const char* dir) { PluginManager::GetInstance().LoadPlugins(dir); }
-}
-#endif
-#endif
-EOF
+          printf "%s\n" "#ifdef __APPLE__" > ios_stubs/Plugin_stub.cpp
+          printf "%s\n" "#include <TargetConditionals.h>" >> ios_stubs/Plugin_stub.cpp
+          printf "%s\n" "#if TARGET_OS_IPHONE" >> ios_stubs/Plugin_stub.cpp
+          printf "%s\n" "#include <stdio.h>" >> ios_stubs/Plugin_stub.cpp
+          printf "%s\n" "class PluginManager {" >> ios_stubs/Plugin_stub.cpp
+          printf "%s\n" "public:" >> ios_stubs/Plugin_stub.cpp
+          printf "%s\n" "    static PluginManager& GetInstance() { static PluginManager instance; return instance; }" >> ios_stubs/Plugin_stub.cpp
+          printf "%s\n" "    void Initialize(void) { printf(\"Plugin system disabled on iOS\\n\"); }" >> ios_stubs/Plugin_stub.cpp
+          printf "%s\n" "    void Shutdown(void) {}" >> ios_stubs/Plugin_stub.cpp
+          printf "%s\n" "    void LoadPlugins(const char* path) {}" >> ios_stubs/Plugin_stub.cpp
+          printf "%s\n" "private:" >> ios_stubs/Plugin_stub.cpp
+          printf "%s\n" "    PluginManager() = default;" >> ios_stubs/Plugin_stub.cpp
+          printf "%s\n" "};" >> ios_stubs/Plugin_stub.cpp
+          printf "%s\n" "extern \"C\" {" >> ios_stubs/Plugin_stub.cpp
+          printf "%s\n" "    void Plugin_Init(void) { PluginManager::GetInstance().Initialize(); }" >> ios_stubs/Plugin_stub.cpp
+          printf "%s\n" "    void Plugin_Shutdown(void) { PluginManager::GetInstance().Shutdown(); }" >> ios_stubs/Plugin_stub.cpp
+          printf "%s\n" "    void Plugin_LoadFromDir(const char* dir) { PluginManager::GetInstance().LoadPlugins(dir); }" >> ios_stubs/Plugin_stub.cpp
+          printf "%s\n" "}" >> ios_stubs/Plugin_stub.cpp
+          printf "%s\n" "#endif" >> ios_stubs/Plugin_stub.cpp
+          printf "%s\n" "#endif" >> ios_stubs/Plugin_stub.cpp
           
           printf "%s\n" "Stub files created"
       
@@ -105,6 +93,55 @@ EOF
             ln -s SDL_image SDL2_image
             printf "%s\n" "Created symlink: SDL2_image -> SDL_image"
           fi
+          
+          printf "%s\n" "SDL directories:"
+          ls -la | grep -E "SDL"
+      
+      - name: Create Info.plist
+        run: |
+          printf "%s\n" "Creating Info.plist..."
+          
+          printf "%s\n" "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" > CasioEmuMsvc/Info.plist
+          printf "%s\n" "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "<plist version=\"1.0\">" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "<dict>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "    <key>CFBundleDevelopmentRegion</key>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "    <string>en</string>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "    <key>CFBundleExecutable</key>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "    <string>CasioEmuApp</string>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "    <key>CFBundleIdentifier</key>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "    <string>com.casioemu.ios</string>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "    <key>CFBundleInfoDictionaryVersion</key>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "    <string>6.0</string>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "    <key>CFBundleName</key>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "    <string>CasioEmu</string>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "    <key>CFBundlePackageType</key>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "    <string>APPL</string>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "    <key>CFBundleShortVersionString</key>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "    <string>1.0</string>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "    <key>CFBundleVersion</key>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "    <string>1</string>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "    <key>LSRequiresIPhoneOS</key>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "    <true/>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "    <key>UIDeviceFamily</key>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "    <array>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "        <integer>1</integer>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "        <integer>2</integer>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "    </array>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "    <key>UISupportedInterfaceOrientations</key>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "    <array>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "        <string>UIInterfaceOrientationPortrait</string>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "        <string>UIInterfaceOrientationLandscapeLeft</string>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "        <string>UIInterfaceOrientationLandscapeRight</string>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "    </array>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "    <key>UIRequiredDeviceCapabilities</key>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "    <array>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "        <string>armv7</string>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "    </array>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "</dict>" >> CasioEmuMsvc/Info.plist
+          printf "%s\n" "</plist>" >> CasioEmuMsvc/Info.plist
+          
+          printf "%s\n" "Info.plist created"
       
       - name: Build iOS app
         run: |
@@ -180,7 +217,7 @@ EOF
           zip -r ../CasioEmuMsvc.ipa * -q
           cd ..
           
-          printf "%s\n" "✅ IPA created successfully!"
+          printf "%s\n" "IPA created successfully!"
           printf "%s\n" "File: CasioEmuMsvc.ipa"
           printf "%s\n" "Size: %s" "$(ls -lh CasioEmuMsvc.ipa | awk '{print $5}')"
       
