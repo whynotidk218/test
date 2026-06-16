@@ -36,6 +36,13 @@ jobs:
           fi
           echo "✓ Submodules validated"
 
+      - name: Patch SDL_image IMG_ImageIO.m for ARC compatibility
+        run: |
+          # Sửa lỗi ép kiểu và autorelease trong IMG_ImageIO.m
+          sed -i '' 's/NSData\* data = (id)CGDataProviderCopyData(provider);/NSData* data = (__bridge_transfer NSData*)CGDataProviderCopyData(provider);/' SDL_image/src/IMG_ImageIO.m
+          sed -i '' '/\[data autorelease\];/d' SDL_image/src/IMG_ImageIO.m
+          echo "✅ Patched IMG_ImageIO.m"
+
       - name: Create SDL2 symlinks (root level)
         run: |
           ln -sf SDL SDL2
@@ -45,7 +52,6 @@ jobs:
       - name: Create iOS stub files
         run: |
           mkdir -p ios
-
           cat > ios/main.m << 'EOF'
           #import <UIKit/UIKit.h>
           #import "AppDelegate.h"
@@ -84,7 +90,6 @@ jobs:
 
           @end
           EOF
-
           echo "✅ Stub files created in ios/"
 
       - name: Create stub files for disabled features (Discord, CrashHandler, Plugin)
@@ -138,7 +143,6 @@ jobs:
           #endif
           #endif
           EOF
-
           echo "✅ Stub files for disabled features created"
 
       - name: Create Info.plist
@@ -236,7 +240,6 @@ jobs:
           fi
           echo "Found .app at $APP_PATH"
           cp -R "$APP_PATH" Payload/
-          # Tạo file IPA với tên mong muốn
           zip -r CasioEmuMsvc.ipa Payload/
 
       - name: Upload IPA as artifact
