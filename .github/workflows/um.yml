@@ -38,7 +38,7 @@ jobs:
 
       - name: Patch SDL_image IMG_ImageIO.m for ARC compatibility
         run: |
-          # Sửa lỗi ép kiểu và autorelease trong IMG_ImageIO.m
+          # Sửa lỗi ép kiểu và autorelease
           sed -i '' 's/NSData\* data = (id)CGDataProviderCopyData(provider);/NSData* data = (__bridge_transfer NSData*)CGDataProviderCopyData(provider);/' SDL_image/src/IMG_ImageIO.m
           sed -i '' '/\[data autorelease\];/d' SDL_image/src/IMG_ImageIO.m
           echo "✅ Patched IMG_ImageIO.m"
