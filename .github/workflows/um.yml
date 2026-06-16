@@ -45,6 +45,7 @@ jobs:
       - name: Create iOS stub files
         run: |
           mkdir -p ios
+
           cat > ios/main.m << 'EOF'
           #import <UIKit/UIKit.h>
           #import "AppDelegate.h"
@@ -86,7 +87,7 @@ jobs:
 
           echo "✅ Stub files created in ios/"
 
-      - name: Create stub files for disabled features
+      - name: Create stub files for disabled features (Discord, CrashHandler, Plugin)
         run: |
           mkdir -p ios_stubs
           cat > ios_stubs/DiscordRPC_stub.cpp << 'EOF'
@@ -235,6 +236,7 @@ jobs:
           fi
           echo "Found .app at $APP_PATH"
           cp -R "$APP_PATH" Payload/
+          # Tạo file IPA với tên mong muốn
           zip -r CasioEmuMsvc.ipa Payload/
 
       - name: Upload IPA as artifact
