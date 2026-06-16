@@ -38,7 +38,6 @@ jobs:
 
       - name: Patch SDL_image IMG_ImageIO.m for ARC compatibility
         run: |
-          # Sửa lỗi ép kiểu và autorelease
           sed -i '' 's/NSData\* data = (id)CGDataProviderCopyData(provider);/NSData* data = (__bridge_transfer NSData*)CGDataProviderCopyData(provider);/' SDL_image/src/IMG_ImageIO.m
           sed -i '' '/\[data autorelease\];/d' SDL_image/src/IMG_ImageIO.m
           echo "✅ Patched IMG_ImageIO.m"
@@ -145,6 +144,37 @@ jobs:
           EOF
           echo "✅ Stub files for disabled features created"
 
+      - name: Create SysDialog stub and replace original for iOS
+        run: |
+          cat > ios_stubs/SysDialog.cpp << 'EOF'
+          #ifdef __APPLE__
+          #include <TargetConditionals.h>
+          #if TARGET_OS_IPHONE
+          #include <string>
+          #include <vector>
+          class SysDialog {
+          public:
+              static void ShowMessageBox(const std::string& title, const std::string& message) {
+                  // Stub
+              }
+              static bool ShowOpenFileDialog(const std::string& title, const std::string& filter, std::string& outPath) {
+                  return false;
+              }
+              static bool ShowSaveFileDialog(const std::string& title, const std::string& filter, std::string& outPath) {
+                  return false;
+              }
+              static bool ShowFolderDialog(const std::string& title, std::string& outPath) {
+                  return false;
+              }
+          };
+          #endif
+          #endif
+          EOF
+          # Replace original SysDialog.cpp with stub
+          rm -f CasioEmuMsvc/src/Ext/SysDialog.cpp
+          cp ios_stubs/SysDialog.cpp CasioEmuMsvc/src/Ext/SysDialog.cpp
+          echo "✅ SysDialog replaced with stub"
+
       - name: Create Info.plist
         run: |
           cat > CasioEmuMsvc/Info.plist << 'EOF'
@@ -210,7 +240,6 @@ jobs:
           echo "📋 All schemes:"
           schemes=$(xcodebuild -project CasioEmuMsvc.xcodeproj -list -json | jq -r '.project.schemes[]')
           echo "$schemes"
-          # Loại bỏ schemes phụ trợ
           main_scheme=$(echo "$schemes" | grep -v -e "ALL_BUILD" -e "ZERO_CHECK" -e "install" -e "package" | head -n 1)
           if [ -z "$main_scheme" ]; then
             main_scheme=$(echo "$schemes" | head -n 1)
