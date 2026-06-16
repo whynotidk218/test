@@ -1,48 +1,329 @@
-name: Build iOS IPA (Optimized Resource Compile)
+name: 🍎 Build iOS IPA (Unsigned)
 
 on:
   push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
+    branches: [stable]
   workflow_dispatch:
 
 jobs:
   build-ios:
+    name: Build CasioEmu for iOS (AltStore)
     runs-on: macos-latest
 
     steps:
+      # ────────────────────────────────────────────────────
+      # 1. Checkout
+      # ────────────────────────────────────────────────────
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          # Tắt tính năng tự động tải toàn bộ submodule đệ quy để tránh tải sentry-native
           submodules: false
           fetch-depth: 1
 
-      - name: Target and Fetch Only Required Submodules
+      # ────────────────────────────────────────────────────
+      # 2. Init ONLY needed submodules (SDL + SDL_image)
+      # ────────────────────────────────────────────────────
+      - name: Init SDL and SDL_image submodules
         run: |
-          echo "📥 Chỉ tải các tài nguyên SDL cần thiết cho iOS..."
-          # Ép buộc hệ thống chỉ cấu hình và tải đúng thư mục mã nguồn của SDL và SDL_image
           git submodule update --init --force SDL
           git submodule update --init --force SDL_image
-          
-          echo "🔗 Tạo liên kết thư mục hệ thống..."
-          ln -sf SDL SDL2
-          ln -sf SDL_image SDL2_image
 
+      # ────────────────────────────────────────────────────
+      # 3. Patch SDL_image's Objective-C file for ARC
+      # ────────────────────────────────────────────────────
       - name: Patch SDL_image for ARC
         run: |
-          if [ -f SDL_image/src/IMG_ImageIO.m ]; then
-            sed -i '' 's/NSData\* data = (id)CGDataProviderCopyData(provider);/NSData* data = (__bridge_transfer NSData*)CGDataProviderCopyData(provider);/' SDL_image/src/IMG_ImageIO.m
-            sed -i '' '/\[data autorelease\];/d' SDL_image/src/IMG_ImageIO.m
-            echo "✅ Patched IMG_ImageIO.m"
+          FILE="SDL_image/src/IMG_ImageIO.m"
+          if [ -f "$FILE" ]; then
+            sed -i '' \
+              's/NSData\* data = (id)CGDataProviderCopyData(provider);/NSData* data = (__bridge_transfer NSData*)CGDataProviderCopyData(provider);/' \
+              "$FILE"
+            sed -i '' '/\[data autorelease\];/d' "$FILE"
+            echo "✅ Patched $FILE"
           fi
 
-      - name: Create iOS Structure
+      # ────────────────────────────────────────────────────
+      # 4. Build + Link + Package IPA — all in one shell
+      #    so variable scope is preserved throughout.
+      # ────────────────────────────────────────────────────
+      - name: Compile, Link and Package IPA
         run: |
+          set -euo pipefail
+
+          # ── Environment ─────────────────────────────────
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          echo "📱 iOS SDK: $SDK"
+
+          # Auto-detect source directory
+          SRC_DIR="CasioEmuMsvc/src"
+          [ -d "src" ] && SRC_DIR="src"
+          echo "📂 Source dir: $SRC_DIR"
+
+          # Output dirs
+          mkdir -p ios_build/objs
           mkdir -p ios_build/Payload/CasioEmu.app
-          
-          cat > ios_build/Payload/CasioEmu.app/Info.plist << 'EOF'
+
+          # ── Compiler flags ───────────────────────────────
+          # Common flags for ALL compilation units
+          COMMON="\
+            -arch arm64 \
+            -miphoneos-version-min=13.0 \
+            -isysroot $SDK \
+            -I./SDL/include \
+            -I./SDL_image \
+            -I./$SRC_DIR \
+            -D__IPHONEOS__ \
+            -D__APPLE__ \
+            -DSDL_VIDEO_DRIVER_UIKIT=1 \
+            -DSDL_AUDIO_DRIVER_COREAUDIO=1 \
+            -DGLES_SILENCE_DEPRECATION \
+            -DGL_SILENCE_DEPRECATION \
+            -DSDL_HIDAPI_DISABLED=1 \
+            -O1 \
+            -w"
+
+          # Extra suppression flags for SDL C files
+          # (SDL uses void* casts that are valid in C but banned in C++)
+          C_EXTRA="\
+            -Wno-incompatible-pointer-types \
+            -Wno-incompatible-function-pointer-types \
+            -Wno-implicit-function-declaration"
+
+          IDX=0        # global object counter
+          FAILED=0     # count compilation failures (non-fatal so we see all errors)
+
+          # ── Per-file compile function ────────────────────
+          do_compile() {
+            local LANG="$1"
+            local SRC="$2"
+            local OBJ="ios_build/objs/${IDX}.o"
+            IDX=$((IDX + 1))
+
+            case "$LANG" in
+              c)
+                xcrun --sdk iphoneos clang \
+                  -x c -std=c11 \
+                  $COMMON $C_EXTRA \
+                  -c "$SRC" -o "$OBJ" || { echo "❌ FAILED: $SRC"; FAILED=$((FAILED+1)); return; }
+                ;;
+              objc)
+                xcrun --sdk iphoneos clang \
+                  -x objective-c -std=c11 -fobjc-arc \
+                  $COMMON \
+                  -c "$SRC" -o "$OBJ" || { echo "❌ FAILED: $SRC"; FAILED=$((FAILED+1)); return; }
+                ;;
+              cxx)
+                xcrun --sdk iphoneos clang++ \
+                  -x c++ -std=c++20 \
+                  $COMMON \
+                  -c "$SRC" -o "$OBJ" || { echo "❌ FAILED: $SRC"; FAILED=$((FAILED+1)); return; }
+                ;;
+            esac
+          }
+
+          # ════════════════════════════════════════════════
+          # SDL — C source files
+          # Exclude every platform that is NOT iOS/Apple.
+          # Compile as pure C (not C++) to preserve void* semantics.
+          # ════════════════════════════════════════════════
+          echo ""
+          echo "⚙️  [1/5] Compiling SDL C files..."
+
+          SDL_EXCLUDES="\
+            ! -path '*/audio/ps2/*' \
+            ! -path '*/audio/android/*' \
+            ! -path '*/audio/arts/*' \
+            ! -path '*/audio/alsa/*' \
+            ! -path '*/audio/pipewire/*' \
+            ! -path '*/audio/n3ds/*' \
+            ! -path '*/audio/nacl/*' \
+            ! -path '*/audio/openslES/*' \
+            ! -path '*/audio/psp/*' \
+            ! -path '*/audio/vita/*' \
+            ! -path '*/audio/winmm/*' \
+            ! -path '*/audio/directsound/*' \
+            ! -path '*/audio/wasapi/*' \
+            ! -path '*/audio/haiku/*' \
+            ! -path '*/audio/netbsd/*' \
+            ! -path '*/audio/jack/*' \
+            ! -path '*/audio/paudio/*' \
+            ! -path '*/audio/qsa/*' \
+            ! -path '*/video/android/*' \
+            ! -path '*/video/windows/*' \
+            ! -path '*/video/wayland/*' \
+            ! -path '*/video/cocoa/*' \
+            ! -path '*/video/x11/*' \
+            ! -path '*/video/n3ds/*' \
+            ! -path '*/video/psp/*' \
+            ! -path '*/video/vita/*' \
+            ! -path '*/video/nacl/*' \
+            ! -path '*/video/haiku/*' \
+            ! -path '*/video/ngage/*' \
+            ! -path '*/video/os2/*' \
+            ! -path '*/video/offscreen/*' \
+            ! -path '*/video/riscos/*' \
+            ! -path '*/thread/windows/*' \
+            ! -path '*/thread/n3ds/*' \
+            ! -path '*/thread/ngage/*' \
+            ! -path '*/loadso/windows/*' \
+            ! -path '*/loadso/dummy/*' \
+            ! -path '*/filesystem/windows/*' \
+            ! -path '*/filesystem/n3ds/*' \
+            ! -path '*/filesystem/nacl/*' \
+            ! -path '*/filesystem/riscos/*' \
+            ! -path '*/timer/windows/*' \
+            ! -path '*/timer/nds/*' \
+            ! -path '*/power/android/*' \
+            ! -path '*/power/windows/*' \
+            ! -path '*/power/n3ds/*' \
+            ! -path '*/power/psp/*' \
+            ! -path '*/power/vita/*' \
+            ! -path '*/joystick/android/*' \
+            ! -path '*/joystick/windows/*' \
+            ! -path '*/joystick/n3ds/*' \
+            ! -path '*/joystick/psp/*' \
+            ! -path '*/joystick/vita/*' \
+            ! -path '*/joystick/haiku/*' \
+            ! -path '*/joystick/bsd/*' \
+            ! -path '*/sensor/android/*' \
+            ! -path '*/sensor/windows/*' \
+            ! -path '*/sensor/n3ds/*' \
+            ! -path '*/haptic/linux/*' \
+            ! -path '*/haptic/windows/*' \
+            ! -path '*/misc/android/*' \
+            ! -path '*/misc/windows/*' \
+            ! -path '*/misc/riscos/*' \
+            ! -path '*/misc/nacl/*' \
+            ! -path '*/locale/android/*' \
+            ! -path '*/locale/windows/*' \
+            ! -path '*/locale/n3ds/*'"
+
+          while IFS= read -r f; do
+            do_compile c "$f"
+          done < <(eval "find SDL/src -name '*.c' $SDL_EXCLUDES")
+
+          # ════════════════════════════════════════════════
+          # SDL — Objective-C files (UIKit video driver, etc.)
+          # These MUST be compiled as ObjC, not C or C++.
+          # ════════════════════════════════════════════════
+          echo ""
+          echo "⚙️  [2/5] Compiling SDL Objective-C files..."
+          while IFS= read -r f; do
+            do_compile objc "$f"
+          done < <(find SDL/src -name "*.m")
+
+          # ════════════════════════════════════════════════
+          # SDL_image — C source files
+          # ════════════════════════════════════════════════
+          echo ""
+          echo "⚙️  [3/5] Compiling SDL_image C files..."
+          while IFS= read -r f; do
+            do_compile c "$f"
+          done < <(find SDL_image/src -name "*.c")
+
+          # SDL_image — Objective-C files (IMG_ImageIO.m)
+          while IFS= read -r f; do
+            do_compile objc "$f"
+          done < <(find SDL_image/src -name "*.m")
+
+          # ════════════════════════════════════════════════
+          # CasioEmu — Mock for desktop-only features
+          # ════════════════════════════════════════════════
+          cat > ios_build/SysDialog_mock.cpp << 'MOCK_EOF'
+          #include <string>
+          class SysDialog {
+          public:
+              static void ShowMessageBox(const std::string& t, const std::string& m) {}
+              static bool ShowOpenFileDialog(const std::string& t, const std::string& f, std::string& o) { return false; }
+              static bool ShowSaveFileDialog(const std::string& t, const std::string& f, std::string& o) { return false; }
+              static bool ShowFolderDialog(const std::string& t, std::string& o) { return false; }
+          };
+          MOCK_EOF
+
+          # ════════════════════════════════════════════════
+          # CasioEmu — C++ source files
+          # MUST use -std=c++20: code uses concepts, requires,
+          # std::string::ends_with — all C++20 features.
+          # Original build used c++17 which caused 'concept' errors.
+          # ════════════════════════════════════════════════
+          echo ""
+          echo "⚙️  [4/5] Compiling CasioEmu C++ files..."
+          while IFS= read -r f; do
+            do_compile cxx "$f"
+          done < <(find "$SRC_DIR" -name "*.cpp" \
+            ! -name "*Win32*" \
+            ! -name "*Windows*" \
+            ! -name "*Linux*" \
+            ! -name "SysDialog.cpp" \
+            ! -name "DiscordRPC.cpp" \
+            ! -name "CrashHandler.cpp" \
+            ! -name "web_main.cpp" \
+            ! -name "core_api.cpp")
+
+          do_compile cxx ios_build/SysDialog_mock.cpp
+
+          # iOS-specific source if the ios/ folder exists
+          if [ -d "ios" ]; then
+            while IFS= read -r f; do do_compile cxx "$f"; done < <(find ios -name "*.cpp" 2>/dev/null)
+            while IFS= read -r f; do do_compile objc "$f"; done < <(find ios -name "*.m" 2>/dev/null)
+            while IFS= read -r f; do do_compile c "$f"; done   < <(find ios -name "*.c" 2>/dev/null)
+          fi
+          if [ -d "ios_stubs" ]; then
+            while IFS= read -r f; do do_compile cxx "$f"; done < <(find ios_stubs -name "*.cpp" 2>/dev/null)
+            while IFS= read -r f; do do_compile c "$f"; done   < <(find ios_stubs -name "*.c" 2>/dev/null)
+          fi
+
+          # ── Abort if too many files failed ───────────────
+          TOTAL=$IDX
+          echo ""
+          echo "📊 Compiled $TOTAL files, $FAILED failed"
+          if [ "$FAILED" -gt 10 ]; then
+            echo "❌ Too many compilation failures ($FAILED), aborting."
+            exit 1
+          fi
+
+          # ════════════════════════════════════════════════
+          # Link
+          # Use -filelist to avoid ARG_MAX limits with many .o files
+          # ════════════════════════════════════════════════
+          echo ""
+          echo "🔗 [5/5] Linking binary..."
+          find ios_build/objs -name "*.o" > ios_build/objs.list
+          echo "   Object files: $(wc -l < ios_build/objs.list)"
+
+          xcrun --sdk iphoneos clang++ \
+            -arch arm64 \
+            -miphoneos-version-min=13.0 \
+            -isysroot "$SDK" \
+            -filelist ios_build/objs.list \
+            -framework UIKit \
+            -framework Foundation \
+            -framework CoreGraphics \
+            -framework QuartzCore \
+            -framework OpenGLES \
+            -framework AudioToolbox \
+            -framework CoreAudio \
+            -framework AVFoundation \
+            -framework GameController \
+            -framework CoreMotion \
+            -framework ImageIO \
+            -framework CoreServices \
+            -framework Metal \
+            -framework MetalKit \
+            -lz -liconv \
+            -o ios_build/Payload/CasioEmu.app/CasioEmu
+
+          echo "✅ Binary linked!"
+          file ios_build/Payload/CasioEmu.app/CasioEmu
+          ls -lh ios_build/Payload/CasioEmu.app/CasioEmu
+
+          # ════════════════════════════════════════════════
+          # Assemble .app bundle
+          # ════════════════════════════════════════════════
+          APP="ios_build/Payload/CasioEmu.app"
+
+          # Info.plist
+          cat > "$APP/Info.plist" << 'PLIST_EOF'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -57,6 +338,8 @@ jobs:
               <string>6.0</string>
               <key>CFBundleName</key>
               <string>CasioEmu</string>
+              <key>CFBundleDisplayName</key>
+              <string>CasioEmu</string>
               <key>CFBundlePackageType</key>
               <string>APPL</string>
               <key>CFBundleShortVersionString</key>
@@ -65,6 +348,8 @@ jobs:
               <string>1</string>
               <key>LSRequiresIPhoneOS</key>
               <true/>
+              <key>MinimumOSVersion</key>
+              <string>13.0</string>
               <key>UIFileSharingEnabled</key>
               <true/>
               <key>LSSupportsOpeningDocumentsInPlace</key>
@@ -80,60 +365,43 @@ jobs:
                   <string>UIInterfaceOrientationLandscapeLeft</string>
                   <string>UIInterfaceOrientationLandscapeRight</string>
               </array>
+              <key>UISupportedInterfaceOrientations~ipad</key>
+              <array>
+                  <string>UIInterfaceOrientationPortrait</string>
+                  <string>UIInterfaceOrientationPortraitUpsideDown</string>
+                  <string>UIInterfaceOrientationLandscapeLeft</string>
+                  <string>UIInterfaceOrientationLandscapeRight</string>
+              </array>
           </dict>
           </plist>
-          EOF
+          PLIST_EOF
 
-      - name: Create Mocks for Desktop Features
-        run: |
-          mkdir -p ios_build
-          cat > ios_build/SysDialog_mock.cpp << 'EOF'
-          #include <string>
-          class SysDialog {
-          public:
-              static void ShowMessageBox(const std::string& t, const std::string& m) {}
-              static bool ShowOpenFileDialog(const std::string& t, const std::string& f, std::string& o) { return false; }
-              static bool ShowSaveFileDialog(const std::string& t, const std::string& f, std::string& o) { return false; }
-              static bool ShowFolderDialog(const std::string& t, std::string& o) { return false; }
-          };
-          EOF
+          # Copy resources
+          for dir in resources ios/resources app/src/main/assets; do
+            [ -d "$dir" ] && cp -r "$dir/." "$APP/" 2>/dev/null && echo "📦 Copied $dir" || true
+          done
 
-      - name: Compile and Link Real-time
-        run: |
+          # ════════════════════════════════════════════════
+          # Package IPA
+          # IPA = zip archive with Payload/App.app inside
+          # ════════════════════════════════════════════════
+          echo ""
+          echo "📦 Packaging IPA..."
           cd ios_build
-          
-          SRC_DIR="../CasioEmuMsvc/src"
-          if [ -d "../src" ]; then SRC_DIR="../src"; fi
-          
-          # Thu thập file nguồn C++ giả lập
-          FILES_TO_COMPILE=$(find "$SRC_DIR" -name "*.cpp" ! -name "*Win32*" ! -name "*Linux*" ! -name "*SysDialog.cpp*" ! -name "*DiscordRPC.cpp*" ! -name "*CrashHandler.cpp*" ! -name "*web_main.cpp*" ! -name "*core_api.cpp*")
-          
-          # Thu thập file nguồn của thư viện SDL đồ họa
-          FILES_TO_COMPILE="$FILES_TO_COMPILE $(find ../SDL/src -name "*.c" ! -name "*windows*" ! -name "*android*" ! -name "*linux*" ! -name "*winrt*")"
-          FILES_TO_COMPILE="$FILES_TO_COMPILE $(find ../SDL_image/src -name "*.c")"
-          FILES_TO_COMPILE="$FILES_TO_COMPILE SysDialog_mock.cpp"
-          
-          INCLUDES="-I../SDL/include -I../SDL_image -I$SRC_DIR"
-          
-          echo "🚀 Khởi động Clang biên dịch ép gói tài nguyên..."
-          xcrun -sdk iphoneos clang++ -arch arm64 -miphoneos-version-min=13.0 \
-            -isysroot $(xcrun -sdk iphoneos --show-sdk-path) \
-            $INCLUDES \
-            -D__IPHONEOS__ -D__APPLE__ -DSDL_VIDEO_DRIVER_UIKIT=1 \
-            -std=c++17 -O2 \
-            $FILES_TO_COMPILE \
-            -framework UIKit -framework Foundation -framework CoreGraphics -framework QuartzCore -framework OpenGLES -framework AudioToolbox -framework CoreAudio -framework AVFoundation -framework GameController -framework CoreMotion \
-            -o Payload/CasioEmu.app/CasioEmu
+          zip -r ../CasioEmu-unsigned.ipa Payload -x "*.DS_Store"
+          cd ..
 
-      - name: Finalize and Package IPA
-        run: |
-          cd ios_build
-          ls -lh Payload/CasioEmu.app/CasioEmu || echo "⚠️ Lỗi: Không tạo được tệp thực thi!"
-          zip -r ../CasioEmuMsvc.ipa Payload/
+          echo ""
+          echo "🎉 Done!"
+          ls -lh CasioEmu-unsigned.ipa
 
-      - name: Upload Finished IPA
+      # ────────────────────────────────────────────────────
+      # 5. Upload artifact
+      # ────────────────────────────────────────────────────
+      - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
-          name: CasioEmu-FixedSubmodule
-          path: CasioEmuMsvc.ipa
-          retention-days: 7
+          name: CasioEmu-unsigned-${{ github.run_number }}
+          path: CasioEmu-unsigned.ipa
+          retention-days: 30
+          if-no-files-found: error
