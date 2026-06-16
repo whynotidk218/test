@@ -8,202 +8,103 @@ on:
 jobs:
   build-ipa:
     runs-on: macos-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          fetch-depth: 0
       
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: latest-stable
       
-      - name: Create iOS AppDelegate files
+      - name: Create missing stub files
         run: |
-          printf "%s\n" "Creating iOS AppDelegate files..."
+          printf "%s\n" "Creating missing stub files..."
           
-          mkdir -p ios
+          # Tạo main.m
+          cat > ios/main.m << 'EOF'
+#import <UIKit/UIKit.h>
+#import "AppDelegate.h"
+
+int main(int argc, char * argv[]) {
+    @autoreleasepool {
+        return UIApplicationMain(argc, argv, nil, NSStringFromClass([AppDelegate class]));
+    }
+}
+EOF
           
-          printf "%s\n" "#import <UIKit/UIKit.h>" > ios/AppDelegate.h
-          printf "%s\n" "" >> ios/AppDelegate.h
-          printf "%s\n" "@interface AppDelegate : UIResponder <UIApplicationDelegate>" >> ios/AppDelegate.h
-          printf "%s\n" "@property (strong, nonatomic) UIWindow *window;" >> ios/AppDelegate.h
-          printf "%s\n" "@end" >> ios/AppDelegate.h
+          # Tạo DiscordRPC_stub.cpp
+          cat > ios_stubs/DiscordRPC_stub.cpp << 'EOF'
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#if TARGET_OS_IPHONE
+void Discord_Initialize(const char* applicationId, void* handlers, int autoRegister, const char* optionalSteamId) {}
+void Discord_Shutdown(void) {}
+void Discord_RunCallbacks(void) {}
+void Discord_UpdatePresence(void* presence) {}
+void Discord_ClearPresence(void) {}
+void Discord_Respond(const char* userId, int reply) {}
+#endif
+#endif
+EOF
           
-          printf "%s\n" "#import \"AppDelegate.h\"" > ios/AppDelegate.m
-          printf "%s\n" "" >> ios/AppDelegate.m
-          printf "%s\n" "@implementation AppDelegate" >> ios/AppDelegate.m
-          printf "%s\n" "" >> ios/AppDelegate.m
-          printf "%s\n" "- (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {" >> ios/AppDelegate.m
-          printf "%s\n" "    self.window = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];" >> ios/AppDelegate.m
-          printf "%s\n" "    UIViewController *viewController = [[UIViewController alloc] init];" >> ios/AppDelegate.m
-          printf "%s\n" "    viewController.view.backgroundColor = [UIColor whiteColor];" >> ios/AppDelegate.m
-          printf "%s\n" "    self.window.rootViewController = viewController;" >> ios/AppDelegate.m
-          printf "%s\n" "    [self.window makeKeyAndVisible];" >> ios/AppDelegate.m
-          printf "%s\n" "    return YES;" >> ios/AppDelegate.m
-          printf "%s\n" "}" >> ios/AppDelegate.m
-          printf "%s\n" "" >> ios/AppDelegate.m
-          printf "%s\n" "@end" >> ios/AppDelegate.m
+          # Tạo CrashHandler_stub.cpp
+          cat > ios_stubs/CrashHandler_stub.cpp << 'EOF'
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#if TARGET_OS_IPHONE
+#include <stdio.h>
+void InitCrashHandler(void) {}
+void ReportCrash(const char* message) { printf("Crash: %s\n", message); }
+void SetCrashHandlerPath(const char* path) {}
+#endif
+#endif
+EOF
           
-          printf "%s\n" "AppDelegate files created"
+          # Tạo Plugin_stub.cpp
+          cat > ios_stubs/Plugin_stub.cpp << 'EOF'
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#if TARGET_OS_IPHONE
+#include <stdio.h>
+class PluginManager {
+public:
+    static PluginManager& GetInstance() { static PluginManager instance; return instance; }
+    void Initialize(void) { printf("Plugin system disabled on iOS\n"); }
+    void Shutdown(void) {}
+    void LoadPlugins(const char* path) {}
+private:
+    PluginManager() = default;
+};
+extern "C" {
+    void Plugin_Init(void) { PluginManager::GetInstance().Initialize(); }
+    void Plugin_Shutdown(void) { PluginManager::GetInstance().Shutdown(); }
+    void Plugin_LoadFromDir(const char* dir) { PluginManager::GetInstance().LoadPlugins(dir); }
+}
+#endif
+#endif
+EOF
+          
+          printf "%s\n" "Stub files created"
       
-      - name: Create Info.plist
+      - name: Create SDL2 symlinks
         run: |
-          printf "%s\n" "Creating Info.plist..."
+          printf "%s\n" "Creating SDL2 symlinks..."
           
-          printf "%s\n" "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" > ios/Info.plist
-          printf "%s\n" "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">" >> ios/Info.plist
-          printf "%s\n" "<plist version=\"1.0\">" >> ios/Info.plist
-          printf "%s\n" "<dict>" >> ios/Info.plist
-          printf "%s\n" "    <key>CFBundleDevelopmentRegion</key>" >> ios/Info.plist
-          printf "%s\n" "    <string>en</string>" >> ios/Info.plist
-          printf "%s\n" "    <key>CFBundleExecutable</key>" >> ios/Info.plist
-          printf "%s\n" "    <string>CasioEmuMsvc</string>" >> ios/Info.plist
-          printf "%s\n" "    <key>CFBundleIdentifier</key>" >> ios/Info.plist
-          printf "%s\n" "    <string>com.casioemu.ios</string>" >> ios/Info.plist
-          printf "%s\n" "    <key>CFBundleInfoDictionaryVersion</key>" >> ios/Info.plist
-          printf "%s\n" "    <string>6.0</string>" >> ios/Info.plist
-          printf "%s\n" "    <key>CFBundleName</key>" >> ios/Info.plist
-          printf "%s\n" "    <string>CasioEmuMsvc</string>" >> ios/Info.plist
-          printf "%s\n" "    <key>CFBundlePackageType</key>" >> ios/Info.plist
-          printf "%s\n" "    <string>APPL</string>" >> ios/Info.plist
-          printf "%s\n" "    <key>CFBundleShortVersionString</key>" >> ios/Info.plist
-          printf "%s\n" "    <string>1.0</string>" >> ios/Info.plist
-          printf "%s\n" "    <key>CFBundleVersion</key>" >> ios/Info.plist
-          printf "%s\n" "    <string>1</string>" >> ios/Info.plist
-          printf "%s\n" "    <key>LSRequiresIPhoneOS</key>" >> ios/Info.plist
-          printf "%s\n" "    <true/>" >> ios/Info.plist
-          printf "%s\n" "    <key>UIDeviceFamily</key>" >> ios/Info.plist
-          printf "%s\n" "    <array>" >> ios/Info.plist
-          printf "%s\n" "        <integer>1</integer>" >> ios/Info.plist
-          printf "%s\n" "        <integer>2</integer>" >> ios/Info.plist
-          printf "%s\n" "    </array>" >> ios/Info.plist
-          printf "%s\n" "    <key>UISupportedInterfaceOrientations</key>" >> ios/Info.plist
-          printf "%s\n" "    <array>" >> ios/Info.plist
-          printf "%s\n" "        <string>UIInterfaceOrientationPortrait</string>" >> ios/Info.plist
-          printf "%s\n" "        <string>UIInterfaceOrientationLandscapeLeft</string>" >> ios/Info.plist
-          printf "%s\n" "        <string>UIInterfaceOrientationLandscapeRight</string>" >> ios/Info.plist
-          printf "%s\n" "    </array>" >> ios/Info.plist
-          printf "%s\n" "    <key>UIRequiredDeviceCapabilities</key>" >> ios/Info.plist
-          printf "%s\n" "    <array>" >> ios/Info.plist
-          printf "%s\n" "        <string>armv7</string>" >> ios/Info.plist
-          printf "%s\n" "    </array>" >> ios/Info.plist
-          printf "%s\n" "</dict>" >> ios/Info.plist
-          printf "%s\n" "</plist>" >> ios/Info.plist
+          if [ -d "SDL" ] && [ ! -d "SDL2" ]; then
+            ln -s SDL SDL2
+            printf "%s\n" "Created symlink: SDL2 -> SDL"
+          fi
           
-          printf "%s\n" "Info.plist created"
-      
-      - name: Create main.m
-        run: |
-          printf "%s\n" "Creating main.m..."
-          
-          printf "%s\n" "#import <UIKit/UIKit.h>" > main.m
-          printf "%s\n" "#import \"ios/AppDelegate.h\"" >> main.m
-          printf "%s\n" "" >> main.m
-          printf "%s\n" "int main(int argc, char * argv[]) {" >> main.m
-          printf "%s\n" "    @autoreleasepool {" >> main.m
-          printf "%s\n" "        return UIApplicationMain(argc, argv, nil, NSStringFromClass([AppDelegate class]));" >> main.m
-          printf "%s\n" "    }" >> main.m
-          printf "%s\n" "}" >> main.m
-          
-          printf "%s\n" "main.m created"
-      
-      - name: Fix asmjit for iOS
-        run: |
-          printf "%s\n" "Fixing asmjit for iOS..."
-          
-          printf "%s\n" "#ifndef ASMJIT_IOS_FIX_H" > CasioEmuMsvc/third_party/asmjit/asmjit/core/ios_fix.h
-          printf "%s\n" "#define ASMJIT_IOS_FIX_H" >> CasioEmuMsvc/third_party/asmjit/asmjit/core/ios_fix.h
-          printf "%s\n" "" >> CasioEmuMsvc/third_party/asmjit/asmjit/core/ios_fix.h
-          printf "%s\n" "#ifdef __APPLE__" >> CasioEmuMsvc/third_party/asmjit/asmjit/core/ios_fix.h
-          printf "%s\n" "#include <TargetConditionals.h>" >> CasioEmuMsvc/third_party/asmjit/asmjit/core/ios_fix.h
-          printf "%s\n" "#if TARGET_OS_IPHONE" >> CasioEmuMsvc/third_party/asmjit/asmjit/core/ios_fix.h
-          printf "%s\n" "#include <libkern/OSCacheControl.h>" >> CasioEmuMsvc/third_party/asmjit/asmjit/core/ios_fix.h
-          printf "%s\n" "" >> CasioEmuMsvc/third_party/asmjit/asmjit/core/ios_fix.h
-          printf "%s\n" "#endif" >> CasioEmuMsvc/third_party/asmjit/asmjit/core/ios_fix.h
-          printf "%s\n" "#endif" >> CasioEmuMsvc/third_party/asmjit/asmjit/core/ios_fix.h
-          printf "%s\n" "#endif" >> CasioEmuMsvc/third_party/asmjit/asmjit/core/ios_fix.h
-          
-          printf "%s\n" "#include \"ios_fix.h\"" > /tmp/virtmem_temp.txt
-          cat CasioEmuMsvc/third_party/asmjit/asmjit/core/virtmem.cpp >> /tmp/virtmem_temp.txt
-          cp /tmp/virtmem_temp.txt CasioEmuMsvc/third_party/asmjit/asmjit/core/virtmem.cpp
-          
-          printf "%s\n" "asmjit iOS fix applied"
-      
-      - name: Create CMakeLists.txt
-        run: |
-          printf "%s\n" "Creating CMakeLists.txt..."
-          
-          printf "%s\n" "cmake_minimum_required(VERSION 3.15)" > CMakeLists.txt
-          printf "%s\n" "project(CasioEmuMsvc VERSION 1.0 LANGUAGES C CXX OBJC)" >> CMakeLists.txt
-          printf "%s\n" "" >> CMakeLists.txt
-          printf "%s\n" "set(CMAKE_OSX_DEPLOYMENT_TARGET \"12.0\")" >> CMakeLists.txt
-          printf "%s\n" "set(CMAKE_OSX_ARCHITECTURES \"arm64\")" >> CMakeLists.txt
-          printf "%s\n" "set(CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED \"NO\")" >> CMakeLists.txt
-          printf "%s\n" "set(CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED \"NO\")" >> CMakeLists.txt
-          printf "%s\n" "" >> CMakeLists.txt
-          printf "%s\n" "add_subdirectory(CasioEmuMsvc/third_party/asmjit)" >> CMakeLists.txt
-          printf "%s\n" "" >> CMakeLists.txt
-          printf "%s\n" "add_definitions(-D__APPLE__=1 -DTARGET_OS_IPHONE=1)" >> CMakeLists.txt
-          printf "%s\n" "" >> CMakeLists.txt
-          printf "%s\n" "file(GLOB_RECURSE EMULATOR_SOURCES" >> CMakeLists.txt
-          printf "%s\n" "    \"CasioEmuMsvc/*.cpp\"" >> CMakeLists.txt
-          printf "%s\n" "    \"CasioEmuMsvc/*.c\"" >> CMakeLists.txt
-          printf "%s\n" "    \"CasioEmuMsvc/*.m\"" >> CMakeLists.txt
-          printf "%s\n" "    \"CasioEmuMsvc/*.mm\"" >> CMakeLists.txt
-          printf "%s\n" ")" >> CMakeLists.txt
-          printf "%s\n" "" >> CMakeLists.txt
-          printf "%s\n" "file(GLOB_RECURSE EMULATOR_HEADERS" >> CMakeLists.txt
-          printf "%s\n" "    \"CasioEmuMsvc/*.h\"" >> CMakeLists.txt
-          printf "%s\n" "    \"CasioEmuMsvc/*.hpp\"" >> CMakeLists.txt
-          printf "%s\n" ")" >> CMakeLists.txt
-          printf "%s\n" "" >> CMakeLists.txt
-          printf "%s\n" "add_executable(CasioEmuMsvc" >> CMakeLists.txt
-          printf "%s\n" "    main.m" >> CMakeLists.txt
-          printf "%s\n" "    ios/AppDelegate.m" >> CMakeLists.txt
-          printf "%s\n" "    ios/AppDelegate.h" >> CMakeLists.txt
-          printf "%s\n" "    \${EMULATOR_SOURCES}" >> CMakeLists.txt
-          printf "%s\n" "    \${EMULATOR_HEADERS}" >> CMakeLists.txt
-          printf "%s\n" ")" >> CMakeLists.txt
-          printf "%s\n" "" >> CMakeLists.txt
-          printf "%s\n" "target_include_directories(CasioEmuMsvc PRIVATE" >> CMakeLists.txt
-          printf "%s\n" "    \${CMAKE_CURRENT_SOURCE_DIR}" >> CMakeLists.txt
-          printf "%s\n" "    \${CMAKE_CURRENT_SOURCE_DIR}/CasioEmuMsvc" >> CMakeLists.txt
-          printf "%s\n" "    \${CMAKE_CURRENT_SOURCE_DIR}/CasioEmuMsvc/third_party/asmjit" >> CMakeLists.txt
-          printf "%s\n" "    \${CMAKE_CURRENT_SOURCE_DIR}/CasioEmuMsvc/third_party/asmjit/asmjit" >> CMakeLists.txt
-          printf "%s\n" "    \${CMAKE_CURRENT_SOURCE_DIR}/CasioEmuMsvc/third_party/asmjit/asmjit/core" >> CMakeLists.txt
-          printf "%s\n" "    \${CMAKE_CURRENT_SOURCE_DIR}/CasioEmuMsvc/third_party/asmjit/asmjit/x86" >> CMakeLists.txt
-          printf "%s\n" ")" >> CMakeLists.txt
-          printf "%s\n" "" >> CMakeLists.txt
-          printf "%s\n" "target_link_libraries(CasioEmuMsvc asmjit)" >> CMakeLists.txt
-          printf "%s\n" "" >> CMakeLists.txt
-          printf "%s\n" "find_library(UIKIT_LIBRARY UIKit REQUIRED)" >> CMakeLists.txt
-          printf "%s\n" "find_library(FOUNDATION_LIBRARY Foundation REQUIRED)" >> CMakeLists.txt
-          printf "%s\n" "find_library(OPENGLES_LIBRARY OpenGLES REQUIRED)" >> CMakeLists.txt
-          printf "%s\n" "find_library(COREGRAPHICS_LIBRARY CoreGraphics REQUIRED)" >> CMakeLists.txt
-          printf "%s\n" "find_library(QUARTZCORE_LIBRARY QuartzCore REQUIRED)" >> CMakeLists.txt
-          printf "%s\n" "find_library(METAL_LIBRARY Metal REQUIRED)" >> CMakeLists.txt
-          printf "%s\n" "" >> CMakeLists.txt
-          printf "%s\n" "target_link_libraries(CasioEmuMsvc" >> CMakeLists.txt
-          printf "%s\n" "    \${UIKIT_LIBRARY}" >> CMakeLists.txt
-          printf "%s\n" "    \${FOUNDATION_LIBRARY}" >> CMakeLists.txt
-          printf "%s\n" "    \${OPENGLES_LIBRARY}" >> CMakeLists.txt
-          printf "%s\n" "    \${COREGRAPHICS_LIBRARY}" >> CMakeLists.txt
-          printf "%s\n" "    \${QUARTZCORE_LIBRARY}" >> CMakeLists.txt
-          printf "%s\n" "    \${METAL_LIBRARY}" >> CMakeLists.txt
-          printf "%s\n" "    \"-framework AudioToolbox\"" >> CMakeLists.txt
-          printf "%s\n" "    \"-framework CoreHaptics\"" >> CMakeLists.txt
-          printf "%s\n" ")" >> CMakeLists.txt
-          printf "%s\n" "" >> CMakeLists.txt
-          printf "%s\n" "set_target_properties(CasioEmuMsvc PROPERTIES" >> CMakeLists.txt
-          printf "%s\n" "    MACOSX_BUNDLE TRUE" >> CMakeLists.txt
-          printf "%s\n" "    MACOSX_BUNDLE_INFO_PLIST \${CMAKE_CURRENT_SOURCE_DIR}/ios/Info.plist" >> CMakeLists.txt
-          printf "%s\n" ")" >> CMakeLists.txt
-          
-          printf "%s\n" "CMakeLists.txt created"
+          if [ -d "SDL_image" ] && [ ! -d "SDL2_image" ]; then
+            ln -s SDL_image SDL2_image
+            printf "%s\n" "Created symlink: SDL2_image -> SDL_image"
+          fi
       
       - name: Build iOS app
         run: |
@@ -213,7 +114,11 @@ jobs:
           cd build-ios
           
           printf "%s\n" "Running CMake..."
-          cmake .. -G Xcode -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
+          cmake .. \
+            -G Xcode \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
+            -DIOS=ON
           
           printf "%s\n" "Finding Xcode project..."
           PROJECT_FILE=$(find . -maxdepth 1 -name "*.xcodeproj" -type d | head -n 1 | sed 's|^\./||')
@@ -230,8 +135,8 @@ jobs:
           SCHEME=$(xcodebuild -project "$PROJECT_FILE" -list 2>/dev/null | grep -A 1 "Schemes:" | tail -n 1 | xargs)
           
           if [ -z "$SCHEME" ]; then
-            printf "%s\n" "ERROR: No scheme found"
-            exit 1
+            printf "%s\n" "Using default scheme: CasioEmuApp"
+            SCHEME="CasioEmuApp"
           fi
           
           printf "%s\n" "Using scheme: $SCHEME"
@@ -275,7 +180,7 @@ jobs:
           zip -r ../CasioEmuMsvc.ipa * -q
           cd ..
           
-          printf "%s\n" "IPA created successfully!"
+          printf "%s\n" "✅ IPA created successfully!"
           printf "%s\n" "File: CasioEmuMsvc.ipa"
           printf "%s\n" "Size: %s" "$(ls -lh CasioEmuMsvc.ipa | awk '{print $5}')"
       
