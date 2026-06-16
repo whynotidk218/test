@@ -5,7 +5,7 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
-  workflow_dispatch:  # Cho phép chạy thủ công
+  workflow_dispatch:
 
 jobs:
   build-ios:
@@ -24,7 +24,7 @@ jobs:
           git submodule status
           git submodule update --init --recursive --force
 
-          # Kiểm tra các submodule quan trọng
+          # Kiểm tra các thư mục tồn tại
           if [ ! -d SDL/CMakeLists.txt ]; then
             echo "⚠️ SDL submodule incomplete, re-initializing..."
             rm -rf SDL
@@ -36,6 +36,12 @@ jobs:
             git submodule update --init --force SDL_image
           fi
           echo "✓ Submodules validated"
+
+      - name: Create symlinks for SDL2 (compatibility)
+        run: |
+          ln -sf ../SDL CasioEmuMsvc/SDL2
+          ln -sf ../SDL_image CasioEmuMsvc/SDL2_image
+          ls -la CasioEmuMsvc/ | grep SDL   # Debug: kiểm tra symlink
 
       - name: Install iOS CMake toolchain
         run: |
@@ -56,7 +62,6 @@ jobs:
       - name: Build with Xcode (unsigned)
         run: |
           cd build-ios
-          # Tìm scheme mặc định (nếu không biết tên, dùng -list để liệt kê)
           xcodebuild -project CasioEmuMsvc.xcodeproj \
             -scheme CasioEmuMsvc \
             -configuration Release \
@@ -68,7 +73,6 @@ jobs:
       - name: Package unsigned .app into .ipa
         run: |
           mkdir -p Payload
-          # Tìm file .app trong thư mục build
           APP_PATH=$(find build-ios -name "*.app" -type d | head -n 1)
           if [ -z "$APP_PATH" ]; then
             echo "❌ .app not found!"
