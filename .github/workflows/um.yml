@@ -36,21 +36,161 @@ jobs:
           fi
           echo "✓ Submodules validated"
 
-      - name: Create symlinks for SDL2 compatibility (root level)
+      - name: Create SDL2 symlinks (root level)
         run: |
           ln -sf SDL SDL2
           ln -sf SDL_image SDL2_image
           ls -la | grep SDL
 
+      - name: Create iOS stub files
+        run: |
+          mkdir -p ios
+          cat > ios/main.m << 'EOF'
+          #import <UIKit/UIKit.h>
+          #import "AppDelegate.h"
+
+          int main(int argc, char * argv[]) {
+              @autoreleasepool {
+                  return UIApplicationMain(argc, argv, nil, NSStringFromClass([AppDelegate class]));
+              }
+          }
+          EOF
+
+          cat > ios/AppDelegate.h << 'EOF'
+          #import <UIKit/UIKit.h>
+
+          @interface AppDelegate : UIResponder <UIApplicationDelegate>
+
+          @property (strong, nonatomic) UIWindow *window;
+
+          @end
+          EOF
+
+          cat > ios/AppDelegate.m << 'EOF'
+          #import "AppDelegate.h"
+
+          @implementation AppDelegate
+
+          - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
+              return YES;
+          }
+
+          - (void)applicationWillResignActive:(UIApplication *)application {}
+          - (void)applicationDidEnterBackground:(UIApplication *)application {}
+          - (void)applicationWillEnterForeground:(UIApplication *)application {}
+          - (void)applicationDidBecomeActive:(UIApplication *)application {}
+          - (void)applicationWillTerminate:(UIApplication *)application {}
+
+          @end
+          EOF
+
+          echo "✅ Stub files created in ios/"
+
+      - name: Create stub files for disabled features
+        run: |
+          mkdir -p ios_stubs
+          cat > ios_stubs/DiscordRPC_stub.cpp << 'EOF'
+          #ifdef __APPLE__
+          #include <TargetConditionals.h>
+          #if TARGET_OS_IPHONE
+          void Discord_Initialize(const char* applicationId, void* handlers, int autoRegister, const char* optionalSteamId) {}
+          void Discord_Shutdown(void) {}
+          void Discord_RunCallbacks(void) {}
+          void Discord_UpdatePresence(void* presence) {}
+          void Discord_ClearPresence(void) {}
+          void Discord_Respond(const char* userId, int reply) {}
+          #endif
+          #endif
+          EOF
+
+          cat > ios_stubs/CrashHandler_stub.cpp << 'EOF'
+          #ifdef __APPLE__
+          #include <TargetConditionals.h>
+          #if TARGET_OS_IPHONE
+          #include <stdio.h>
+          void InitCrashHandler(void) {}
+          void ReportCrash(const char* message) { printf("Crash: %s\n", message); }
+          void SetCrashHandlerPath(const char* path) {}
+          #endif
+          #endif
+          EOF
+
+          cat > ios_stubs/Plugin_stub.cpp << 'EOF'
+          #ifdef __APPLE__
+          #include <TargetConditionals.h>
+          #if TARGET_OS_IPHONE
+          #include <stdio.h>
+          class PluginManager {
+          public:
+              static PluginManager& GetInstance() { static PluginManager instance; return instance; }
+              void Initialize(void) { printf("Plugin system disabled on iOS\n"); }
+              void Shutdown(void) {}
+              void LoadPlugins(const char* path) {}
+          private:
+              PluginManager() = default;
+          };
+          extern "C" {
+              void Plugin_Init(void) { PluginManager::GetInstance().Initialize(); }
+              void Plugin_Shutdown(void) { PluginManager::GetInstance().Shutdown(); }
+              void Plugin_LoadFromDir(const char* dir) { PluginManager::GetInstance().LoadPlugins(dir); }
+          }
+          #endif
+          #endif
+          EOF
+
+          echo "✅ Stub files for disabled features created"
+
+      - name: Create Info.plist
+        run: |
+          cat > CasioEmuMsvc/Info.plist << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleDevelopmentRegion</key>
+              <string>en</string>
+              <key>CFBundleExecutable</key>
+              <string>CasioEmuApp</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.casioemu.ios</string>
+              <key>CFBundleInfoDictionaryVersion</key>
+              <string>6.0</string>
+              <key>CFBundleName</key>
+              <string>CasioEmu</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>CFBundleShortVersionString</key>
+              <string>1.0</string>
+              <key>CFBundleVersion</key>
+              <string>1</string>
+              <key>LSRequiresIPhoneOS</key>
+              <true/>
+              <key>UIDeviceFamily</key>
+              <array>
+                  <integer>1</integer>
+                  <integer>2</integer>
+              </array>
+              <key>UISupportedInterfaceOrientations</key>
+              <array>
+                  <string>UIInterfaceOrientationPortrait</string>
+                  <string>UIInterfaceOrientationLandscapeLeft</string>
+                  <string>UIInterfaceOrientationLandscapeRight</string>
+              </array>
+              <key>UIRequiredDeviceCapabilities</key>
+              <array>
+                  <string>armv7</string>
+              </array>
+          </dict>
+          </plist>
+          EOF
+
       - name: Install iOS CMake toolchain
         run: |
           curl -L -o ios.toolchain.cmake https://raw.githubusercontent.com/leetal/ios-cmake/master/ios.toolchain.cmake
 
-      - name: Create build directory
-        run: mkdir -p build-ios
-
       - name: Configure CMake for iOS (device)
         run: |
+          mkdir -p build-ios
           cd build-ios
           cmake .. -G Xcode \
             -DCMAKE_TOOLCHAIN_FILE=../ios.toolchain.cmake \
@@ -58,16 +198,14 @@ jobs:
             -DDEPLOYMENT_TARGET=13.0 \
             -DENABLE_BITCODE=OFF
 
-      - name: List available schemes
-        id: list_schemes
+      - name: List available schemes and select the main one
+        id: select_scheme
         run: |
           cd build-ios
-          echo "📋 All schemes in project:"
-          xcodebuild -project CasioEmuMsvc.xcodeproj -list
-          # Lấy danh sách schemes (dòng bắt đầu bằng "Schemes:" và các dòng tiếp theo)
+          echo "📋 All schemes:"
           schemes=$(xcodebuild -project CasioEmuMsvc.xcodeproj -list -json | jq -r '.project.schemes[]')
-          echo "Raw schemes: $schemes"
-          # Loại bỏ các scheme phụ trợ (ALL_BUILD, ZERO_CHECK, install, package)
+          echo "$schemes"
+          # Loại bỏ schemes phụ trợ
           main_scheme=$(echo "$schemes" | grep -v -e "ALL_BUILD" -e "ZERO_CHECK" -e "install" -e "package" | head -n 1)
           if [ -z "$main_scheme" ]; then
             main_scheme=$(echo "$schemes" | head -n 1)
@@ -84,7 +222,8 @@ jobs:
             -sdk iphoneos \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO \
+            ONLY_ACTIVE_ARCH=NO
 
       - name: Package unsigned .app into .ipa
         run: |
@@ -96,11 +235,11 @@ jobs:
           fi
           echo "Found .app at $APP_PATH"
           cp -R "$APP_PATH" Payload/
-          zip -r CasioEmuMsvc-unsigned.ipa Payload/
+          zip -r CasioEmuMsvc.ipa Payload/
 
-      - name: Upload unsigned IPA as artifact
+      - name: Upload IPA as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CasioEmuMsvc-unsigned
-          path: CasioEmuMsvc-unsigned.ipa
+          name: CasioEmuMsvc
+          path: CasioEmuMsvc.ipa
           retention-days: 7
