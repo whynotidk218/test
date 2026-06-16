@@ -21,52 +21,40 @@ jobs:
         with:
           xcode-version: latest-stable
       
-      - name: Fix submodules
+      - name: Create iOS AppDelegate files
         run: |
-          printf "%s\n" "Fixing submodules..."
-          git submodule update --init --recursive --force
+          printf "%s\n" "Creating iOS AppDelegate files..."
           
-          if [ ! -d "SDL" ]; then
-            printf "%s\n" "Cloning SDL..."
-            git clone --depth 1 https://github.com/libsdl-org/SDL.git SDL
-          fi
+          mkdir -p ios
           
-          if [ ! -d "SDL_image" ]; then
-            printf "%s\n" "Cloning SDL_image..."
-            git clone --depth 1 https://github.com/libsdl-org/SDL_image.git SDL_image
-          fi
+          # Tạo AppDelegate.h
+          printf "%s\n" "#import <UIKit/UIKit.h>" > ios/AppDelegate.h
+          printf "%s\n" "" >> ios/AppDelegate.h
+          printf "%s\n" "@interface AppDelegate : UIResponder <UIApplicationDelegate>" >> ios/AppDelegate.h
+          printf "%s\n" "@property (strong, nonatomic) UIWindow *window;" >> ios/AppDelegate.h
+          printf "%s\n" "@end" >> ios/AppDelegate.h
           
-          if [ ! -d "discord-rpc" ]; then
-            printf "%s\n" "Cloning discord-rpc..."
-            git clone --depth 1 https://github.com/discord/discord-rpc.git discord-rpc
-          fi
+          # Tạo AppDelegate.m
+          printf "%s\n" "#import \"AppDelegate.h\"" > ios/AppDelegate.m
+          printf "%s\n" "" >> ios/AppDelegate.m
+          printf "%s\n" "@implementation AppDelegate" >> ios/AppDelegate.m
+          printf "%s\n" "" >> ios/AppDelegate.m
+          printf "%s\n" "- (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {" >> ios/AppDelegate.m
+          printf "%s\n" "    self.window = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];" >> ios/AppDelegate.m
+          printf "%s\n" "    UIViewController *viewController = [[UIViewController alloc] init];" >> ios/AppDelegate.m
+          printf "%s\n" "    viewController.view.backgroundColor = [UIColor whiteColor];" >> ios/AppDelegate.m
+          printf "%s\n" "    self.window.rootViewController = viewController;" >> ios/AppDelegate.m
+          printf "%s\n" "    [self.window makeKeyAndVisible];" >> ios/AppDelegate.m
+          printf "%s\n" "    return YES;" >> ios/AppDelegate.m
+          printf "%s\n" "}" >> ios/AppDelegate.m
+          printf "%s\n" "" >> ios/AppDelegate.m
+          printf "%s\n" "@end" >> ios/AppDelegate.m
           
-          if [ ! -d "sentry-native" ]; then
-            printf "%s\n" "Cloning sentry-native..."
-            git clone --depth 1 https://github.com/getsentry/sentry-native.git sentry-native
-          fi
-          
-          printf "%s\n" "Submodules fixed"
-          
-          # Fix SDL folder names
-          printf "%s\n" "Creating SDL2 symlinks..."
-          if [ -d "SDL" ] && [ ! -d "SDL2" ]; then
-            ln -s SDL SDL2
-            printf "%s\n" "Created symlink: SDL2 -> SDL"
-          fi
-          
-          if [ -d "SDL_image" ] && [ ! -d "SDL2_image" ]; then
-            ln -s SDL_image SDL2_image
-            printf "%s\n" "Created symlink: SDL2_image -> SDL_image"
-          fi
-          
-          printf "%s\n" "SDL directories:"
-          ls -la | grep -E "SDL"
+          printf "%s\n" "AppDelegate files created"
       
       - name: Create Info.plist
         run: |
           printf "%s\n" "Creating Info.plist..."
-          mkdir -p ios
           
           printf "%s\n" "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" > ios/Info.plist
           printf "%s\n" "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">" >> ios/Info.plist
@@ -101,14 +89,120 @@ jobs:
           printf "%s\n" "        <string>UIInterfaceOrientationLandscapeLeft</string>" >> ios/Info.plist
           printf "%s\n" "        <string>UIInterfaceOrientationLandscapeRight</string>" >> ios/Info.plist
           printf "%s\n" "    </array>" >> ios/Info.plist
+          printf "%s\n" "    <key>UIRequiredDeviceCapabilities</key>" >> ios/Info.plist
+          printf "%s\n" "    <array>" >> ios/Info.plist
+          printf "%s\n" "        <string>armv7</string>" >> ios/Info.plist
+          printf "%s\n" "    </array>" >> ios/Info.plist
           printf "%s\n" "</dict>" >> ios/Info.plist
           printf "%s\n" "</plist>" >> ios/Info.plist
           
           printf "%s\n" "Info.plist created"
       
-      - name: Build for iOS unsigned
+      - name: Create main.m
         run: |
-          printf "%s\n" "Building for iOS without signing..."
+          printf "%s\n" "Creating main.m..."
+          
+          printf "%s\n" "#import <UIKit/UIKit.h>" > main.m
+          printf "%s\n" "#import \"ios/AppDelegate.h\"" >> main.m
+          printf "%s\n" "" >> main.m
+          printf "%s\n" "int main(int argc, char * argv[]) {" >> main.m
+          printf "%s\n" "    @autoreleasepool {" >> main.m
+          printf "%s\n" "        return UIApplicationMain(argc, argv, nil, NSStringFromClass([AppDelegate class]));" >> main.m
+          printf "%s\n" "    }" >> main.m
+          printf "%s\n" "}" >> main.m
+          
+          printf "%s\n" "main.m created"
+      
+      - name: Create CMakeLists.txt
+        run: |
+          printf "%s\n" "Creating CMakeLists.txt..."
+          
+          printf "%s\n" "cmake_minimum_required(VERSION 3.15)" > CMakeLists.txt
+          printf "%s\n" "project(CasioEmuMsvc VERSION 1.0 LANGUAGES C CXX OBJC)" >> CMakeLists.txt
+          printf "%s\n" "" >> CMakeLists.txt
+          printf "%s\n" "set(CMAKE_OSX_DEPLOYMENT_TARGET \"12.0\" CACHE STRING \"\" FORCE)" >> CMakeLists.txt
+          printf "%s\n" "set(CMAKE_OSX_ARCHITECTURES \"arm64\" CACHE STRING \"\" FORCE)" >> CMakeLists.txt
+          printf "%s\n" "set(CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED \"NO\")" >> CMakeLists.txt
+          printf "%s\n" "set(CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED \"NO\")" >> CMakeLists.txt
+          printf "%s\n" "set(CMAKE_XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY \"\")" >> CMakeLists.txt
+          printf "%s\n" "" >> CMakeLists.txt
+          printf "%s\n" "# Thu thập source files từ CasioEmuMsvc" >> CMakeLists.txt
+          printf "%s\n" "file(GLOB_RECURSE EMULATOR_SOURCES" >> CMakeLists.txt
+          printf "%s\n" "    \"CasioEmuMsvc/*.cpp\"" >> CMakeLists.txt
+          printf "%s\n" "    \"CasioEmuMsvc/*.c\"" >> CMakeLists.txt
+          printf "%s\n" "    \"CasioEmuMsvc/*.m\"" >> CMakeLists.txt
+          printf "%s\n" "    \"CasioEmuMsvc/*.mm\"" >> CMakeLists.txt
+          printf "%s\n" "    \"CasioEmuMsvc/*.h\"" >> CMakeLists.txt
+          printf "%s\n" "    \"CasioEmuMsvc/*.hpp\"" >> CMakeLists.txt
+          printf "%s\n" ")" >> CMakeLists.txt
+          printf "%s\n" "" >> CMakeLists.txt
+          printf "%s\n" "# Thêm SDL paths" >> CMakeLists.txt
+          printf "%s\n" "set(SDL2_DIR \"\${CMAKE_CURRENT_SOURCE_DIR}/SDL\")" >> CMakeLists.txt
+          printf "%s\n" "set(SDL2_image_DIR \"\${CMAKE_CURRENT_SOURCE_DIR}/SDL_image\")" >> CMakeLists.txt
+          printf "%s\n" "" >> CMakeLists.txt
+          printf "%s\n" "add_executable(CasioEmuMsvc" >> CMakeLists.txt
+          printf "%s\n" "    main.m" >> CMakeLists.txt
+          printf "%s\n" "    ios/AppDelegate.m" >> CMakeLists.txt
+          printf "%s\n" "    ios/AppDelegate.h" >> CMakeLists.txt
+          printf "%s\n" "    \${EMULATOR_SOURCES}" >> CMakeLists.txt
+          printf "%s\n" ")" >> CMakeLists.txt
+          printf "%s\n" "" >> CMakeLists.txt
+          printf "%s\n" "target_include_directories(CasioEmuMsvc PRIVATE" >> CMakeLists.txt
+          printf "%s\n" "    \${SDL2_DIR}/include" >> CMakeLists.txt
+          printf "%s\n" "    \${CMAKE_CURRENT_SOURCE_DIR}" >> CMakeLists.txt
+          printf "%s\n" ")" >> CMakeLists.txt
+          printf "%s\n" "" >> CMakeLists.txt
+          printf "%s\n" "# Link iOS frameworks" >> CMakeLists.txt
+          printf "%s\n" "find_library(UIKIT_LIBRARY UIKit REQUIRED)" >> CMakeLists.txt
+          printf "%s\n" "find_library(FOUNDATION_LIBRARY Foundation REQUIRED)" >> CMakeLists.txt
+          printf "%s\n" "find_library(OPENGLES_LIBRARY OpenGLES REQUIRED)" >> CMakeLists.txt
+          printf "%s\n" "find_library(COREGRAPHICS_LIBRARY CoreGraphics REQUIRED)" >> CMakeLists.txt
+          printf "%s\n" "find_library(QUARTZCORE_LIBRARY QuartzCore REQUIRED)" >> CMakeLists.txt
+          printf "%s\n" "find_library(METAL_LIBRARY Metal REQUIRED)" >> CMakeLists.txt
+          printf "%s\n" "" >> CMakeLists.txt
+          printf "%s\n" "target_link_libraries(CasioEmuMsvc" >> CMakeLists.txt
+          printf "%s\n" "    \${UIKIT_LIBRARY}" >> CMakeLists.txt
+          printf "%s\n" "    \${FOUNDATION_LIBRARY}" >> CMakeLists.txt
+          printf "%s\n" "    \${OPENGLES_LIBRARY}" >> CMakeLists.txt
+          printf "%s\n" "    \${COREGRAPHICS_LIBRARY}" >> CMakeLists.txt
+          printf "%s\n" "    \${QUARTZCORE_LIBRARY}" >> CMakeLists.txt
+          printf "%s\n" "    \${METAL_LIBRARY}" >> CMakeLists.txt
+          printf "%s\n" "    \"-framework AudioToolbox\"" >> CMakeLists.txt
+          printf "%s\n" "    \"-framework CoreHaptics\"" >> CMakeLists.txt
+          printf "%s\n" "    \"-framework CoreGraphics\"" >> CMakeLists.txt
+          printf "%s\n" "    \"-framework QuartzCore\"" >> CMakeLists.txt
+          printf "%s\n" ")" >> CMakeLists.txt
+          printf "%s\n" "" >> CMakeLists.txt
+          printf "%s\n" "set_target_properties(CasioEmuMsvc PROPERTIES" >> CMakeLists.txt
+          printf "%s\n" "    MACOSX_BUNDLE TRUE" >> CMakeLists.txt
+          printf "%s\n" "    MACOSX_BUNDLE_INFO_PLIST \${CMAKE_CURRENT_SOURCE_DIR}/ios/Info.plist" >> CMakeLists.txt
+          printf "%s\n" "    XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED \"NO\"" >> CMakeLists.txt
+          printf "%s\n" "    XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED \"NO\"" >> CMakeLists.txt
+          printf "%s\n" "    XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY \"\"" >> CMakeLists.txt
+          printf "%s\n" ")" >> CMakeLists.txt
+          
+          printf "%s\n" "CMakeLists.txt created"
+      
+      - name: Create SDL2 symlinks
+        run: |
+          printf "%s\n" "Creating SDL2 symlinks..."
+          
+          if [ -d "SDL" ] && [ ! -d "SDL2" ]; then
+            ln -s SDL SDL2
+            printf "%s\n" "Created symlink: SDL2 -> SDL"
+          fi
+          
+          if [ -d "SDL_image" ] && [ ! -d "SDL2_image" ]; then
+            ln -s SDL_image SDL2_image
+            printf "%s\n" "Created symlink: SDL2_image -> SDL_image"
+          fi
+          
+          printf "%s\n" "SDL directories:"
+          ls -la | grep -E "SDL"
+      
+      - name: Build iOS app
+        run: |
+          printf "%s\n" "Building iOS app..."
           
           mkdir -p build-ios
           cd build-ios
@@ -119,28 +213,40 @@ jobs:
             -DCMAKE_SYSTEM_NAME=iOS \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
             -DENABLE_BITCODE=OFF \
-            -DBUILD_SHARED_LIBS=OFF \
-            -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED=NO \
-            -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED=NO
+            -DBUILD_SHARED_LIBS=OFF
           
-          printf "%s\n" "Running xcodebuild..."
-          xcodebuild \
-            -project CasioEmuMsvc.xcodeproj \
-            -scheme CasioEmuMsvc \
-            -configuration Release \
-            -sdk iphoneos \
-            -arch arm64 \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            ONLY_ACTIVE_ARCH=NO \
-            build 2>&1 | tee build.log
+          printf "%s\n" "Listing generated files..."
+          ls -la
+          
+          printf "%s\n" "Finding Xcode project..."
+          PROJECT_FILE=$(ls *.xcodeproj 2>/dev/null | head -n 1)
+          
+          if [ -n "$PROJECT_FILE" ]; then
+            printf "%s\n" "Found project: $PROJECT_FILE"
+            
+            printf "%s\n" "Listing schemes..."
+            xcodebuild -project "$PROJECT_FILE" -list
+            
+            printf "%s\n" "Building project..."
+            xcodebuild \
+              -project "$PROJECT_FILE" \
+              -scheme CasioEmuMsvc \
+              -configuration Release \
+              -sdk iphoneos \
+              -arch arm64 \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO \
+              ONLY_ACTIVE_ARCH=NO \
+              build 2>&1 | tee build.log
+          else
+            printf "%s\n" "ERROR: No Xcode project generated"
+            exit 1
+          fi
           
           cd ..
-          
-          printf "%s\n" "Build completed"
       
-      - name: Find app bundle
+      - name: Find and package app
         run: |
           printf "%s\n" "Looking for built app..."
           
@@ -155,18 +261,11 @@ jobs:
             mkdir -p Payload
             cp -r "$APP_PATH" Payload/
             printf "%s\n" "App copied to Payload/"
+            
+            ls -la Payload/
           else
-            printf "%s\n" "WARNING: No .app found, creating stub app..."
-            
-            mkdir -p Payload/CasioEmuMsvc.app
-            cp ios/Info.plist Payload/CasioEmuMsvc.app/
-            
-            printf "%s\n" "#!/bin/bash" > Payload/CasioEmuMsvc.app/CasioEmuMsvc
-            printf "%s\n" "echo 'CasioEmuMsvc - iOS Emulator'" >> Payload/CasioEmuMsvc.app/CasioEmuMsvc
-            printf "%s\n" "echo 'Build date: %s'" "$(date)" >> Payload/CasioEmuMsvc.app/CasioEmuMsvc
-            printf "%s\n" "exit 0" >> Payload/CasioEmuMsvc.app/CasioEmuMsvc
-            
-            chmod +x Payload/CasioEmuMsvc.app/CasioEmuMsvc
+            printf "%s\n" "ERROR: No .app found"
+            exit 1
           fi
       
       - name: Create IPA
