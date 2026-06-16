@@ -1,4 +1,4 @@
-name: Build iOS IPA (unsigned)
+name: Build iOS IPA (again)
 
 on:
   push:
@@ -20,176 +20,25 @@ jobs:
 
       - name: Validate and fix submodules
         run: |
-          echo "🔍 Checking submodules..."
-          git submodule status
           git submodule update --init --recursive --force
-
-          if [ ! -d SDL/CMakeLists.txt ]; then
-            echo "⚠️ SDL submodule incomplete, re-initializing..."
-            rm -rf SDL
-            git submodule update --init --force SDL
-          fi
-          if [ ! -f SDL_image/CMakeLists.txt ]; then
-            echo "⚠️ SDL_image submodule incomplete, re-initializing..."
-            rm -rf SDL_image
-            git submodule update --init --force SDL_image
-          fi
-          echo "✓ Submodules validated"
-
-      - name: Patch SDL_image IMG_ImageIO.m for ARC compatibility
-        run: |
-          sed -i '' 's/NSData\* data = (id)CGDataProviderCopyData(provider);/NSData* data = (__bridge_transfer NSData*)CGDataProviderCopyData(provider);/' SDL_image/src/IMG_ImageIO.m
-          sed -i '' '/\[data autorelease\];/d' SDL_image/src/IMG_ImageIO.m
-          echo "✅ Patched IMG_ImageIO.m"
-
-      - name: Create SDL2 symlinks (root level)
-        run: |
+          # Tạo liên kết thư mục để các lệnh gọi include không bị lỗi
           ln -sf SDL SDL2
           ln -sf SDL_image SDL2_image
-          ls -la | grep SDL
 
-      - name: Create iOS stub files
+      - name: Patch SDL_image for ARC
         run: |
-          mkdir -p ios
-          cat > ios/main.m << 'EOF'
-          #import <UIKit/UIKit.h>
-          #import "AppDelegate.h"
-
-          int main(int argc, char * argv[]) {
-              @autoreleasepool {
-                  return UIApplicationMain(argc, argv, nil, NSStringFromClass([AppDelegate class]));
-              }
-          }
-          EOF
-
-          cat > ios/AppDelegate.h << 'EOF'
-          #import <UIKit/UIKit.h>
-
-          @interface AppDelegate : UIResponder <UIApplicationDelegate>
-
-          @property (strong, nonatomic) UIWindow *window;
-
-          @end
-          EOF
-
-          cat > ios/AppDelegate.m << 'EOF'
-          #import "AppDelegate.h"
-
-          @implementation AppDelegate
-
-          - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
-              return YES;
-          }
-
-          - (void)applicationWillResignActive:(UIApplication *)application {}
-          - (void)applicationDidEnterBackground:(UIApplication *)application {}
-          - (void)applicationWillEnterForeground:(UIApplication *)application {}
-          - (void)applicationDidBecomeActive:(UIApplication *)application {}
-          - (void)applicationWillTerminate:(UIApplication *)application {}
-
-          @end
-          EOF
-          echo "✅ Stub files created in ios/"
-
-      - name: Create stub files for disabled features (Discord, CrashHandler, Plugin)
-        run: |
-          mkdir -p ios_stubs
-          cat > ios_stubs/DiscordRPC_stub.cpp << 'EOF'
-          #ifdef __APPLE__
-          #include <TargetConditionals.h>
-          #if TARGET_OS_IPHONE
-          void Discord_Initialize(const char* applicationId, void* handlers, int autoRegister, const char* optionalSteamId) {}
-          void Discord_Shutdown(void) {}
-          void Discord_RunCallbacks(void) {}
-          void Discord_UpdatePresence(void* presence) {}
-          void Discord_ClearPresence(void) {}
-          void Discord_Respond(const char* userId, int reply) {}
-          #endif
-          #endif
-          EOF
-
-          cat > ios_stubs/CrashHandler_stub.cpp << 'EOF'
-          #ifdef __APPLE__
-          #include <TargetConditionals.h>
-          #if TARGET_OS_IPHONE
-          #include <stdio.h>
-          void InitCrashHandler(void) {}
-          void ReportCrash(const char* message) { printf("Crash: %s\n", message); }
-          void SetCrashHandlerPath(const char* path) {}
-          #endif
-          #endif
-          EOF
-
-          cat > ios_stubs/Plugin_stub.cpp << 'EOF'
-          #ifdef __APPLE__
-          #include <TargetConditionals.h>
-          #if TARGET_OS_IPHONE
-          #include <stdio.h>
-          class PluginManager {
-          public:
-              static PluginManager& GetInstance() { static PluginManager instance; return instance; }
-              void Initialize(void) { printf("Plugin system disabled on iOS\n"); }
-              void Shutdown(void) {}
-              void LoadPlugins(const char* path) {}
-          private:
-              PluginManager() = default;
-          };
-          extern "C" {
-              void Plugin_Init(void) { PluginManager::GetInstance().Initialize(); }
-              void Plugin_Shutdown(void) { PluginManager::GetInstance().Shutdown(); }
-              void Plugin_LoadFromDir(const char* dir) { PluginManager::GetInstance().LoadPlugins(dir); }
-          }
-          #endif
-          #endif
-          EOF
-          echo "✅ Stub files for disabled features created"
-
-      - name: Create SysDialog stub and replace original for iOS
-        run: |
-          cat > ios_stubs/SysDialog.cpp << 'EOF'
-          #ifdef __APPLE__
-          #include <TargetConditionals.h>
-          #if TARGET_OS_IPHONE
-          #include <string>
-          #include <vector>
-          class SysDialog {
-          public:
-              static void ShowMessageBox(const std::string& title, const std::string& message) {
-                  // Stub
-              }
-              static bool ShowOpenFileDialog(const std::string& title, const std::string& filter, std::string& outPath) {
-                  return false;
-              }
-              static bool ShowSaveFileDialog(const std::string& title, const std::string& filter, std::string& outPath) {
-                  return false;
-              }
-              static bool ShowFolderDialog(const std::string& title, std::string& outPath) {
-                  return false;
-              }
-          };
-          #endif
-          #endif
-          EOF
-          # Replace original SysDialog.cpp with stub
-          rm -f CasioEmuMsvc/src/Ext/SysDialog.cpp
-          cp ios_stubs/SysDialog.cpp CasioEmuMsvc/src/Ext/SysDialog.cpp
-          echo "✅ SysDialog replaced with stub"
-
-      - name: Patch StartupUi for iOS
-        run: |
-          echo "🔧 Patching StartupUi.cpp"
-          if [ -f CasioEmuMsvc/src/StartupUi/StartupUi.cpp ]; then
-            sed -i '' \
-            's/bool ok = CreateDesktopShortcut(shortcut_model_path, name_str, icon_str);/bool ok = false;/g' \
-            CasioEmuMsvc/src/StartupUi/StartupUi.cpp
-            echo "✅ StartupUi patched"
-          else
-            echo "⚠️ StartupUi.cpp not found"
+          if [ -f SDL_image/src/IMG_ImageIO.m ]; then
+            sed -i '' 's/NSData\* data = (id)CGDataProviderCopyData(provider);/NSData* data = (__bridge_transfer NSData*)CGDataProviderCopyData(provider);/' SDL_image/src/IMG_ImageIO.m
+            sed -i '' '/\[data autorelease\];/d' SDL_image/src/IMG_ImageIO.m
+            echo "✅ Patched IMG_ImageIO.m"
           fi
 
-      - name: Create Info.plist
+      - name: Create iOS Structure
         run: |
-          cat > CasioEmuMsvc/Info.plist << 'EOF'
+          mkdir -p ios_build/Payload/CasioEmu.app
+          
+          # Cấu hình Info.plist tích hợp tính năng File Sharing để nạp ROM sau này
+          cat > ios_build/Payload/CasioEmu.app/Info.plist << 'EOF'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -197,9 +46,9 @@ jobs:
               <key>CFBundleDevelopmentRegion</key>
               <string>en</string>
               <key>CFBundleExecutable</key>
-              <string>CasioEmuApp</string>
+              <string>CasioEmu</string>
               <key>CFBundleIdentifier</key>
-              <string>com.casioemu.ios</string>
+              <string>com.pkdev.casioemu</string>
               <key>CFBundleInfoDictionaryVersion</key>
               <string>6.0</string>
               <key>CFBundleName</key>
@@ -212,6 +61,10 @@ jobs:
               <string>1</string>
               <key>LSRequiresIPhoneOS</key>
               <true/>
+              <key>UIFileSharingEnabled</key>
+              <true/>
+              <key>LSSupportsOpeningDocumentsInPlace</key>
+              <true/>
               <key>UIDeviceFamily</key>
               <array>
                   <integer>1</integer>
@@ -223,53 +76,82 @@ jobs:
                   <string>UIInterfaceOrientationLandscapeLeft</string>
                   <string>UIInterfaceOrientationLandscapeRight</string>
               </array>
-              <key>UIRequiredDeviceCapabilities</key>
-              <array>
-                  <string>armv7</string>
-              </array>
           </dict>
           </plist>
           EOF
 
-      - name: List available schemes and select the main one
-        id: select_scheme
+      - name: Gather Local Repo Resources
         run: |
-          echo "📋 All schemes from CasioEmuMsvc project:"
-          schemes=$(xcodebuild -project CasioEmuMsvc/CasioEmuMsvc.xcodeproj -list -json | jq -r '.project.schemes[]')
-          echo "$schemes"
-          main_scheme=$(echo "$schemes" | grep -v -e "ALL_BUILD" -e "ZERO_CHECK" -e "install" -e "package" | head -n 1)
-          if [ -z "$main_scheme" ]; then
-            main_scheme=$(echo "$schemes" | head -n 1)
+          cd ios_build
+          echo "🔍 Đang rà soát và lấy file nguồn trực tiếp từ repo..."
+          
+          # Tìm tất cả file .cpp trong thư mục src ở gốc repo của bạn
+          if [ -d "../src" ]; then
+            find ../src -name "*.cpp" ! -name "*Win32*" ! -name "*Linux*" ! -name "*SysDialog.cpp*" > sources.txt
+          elif [ -d "../CasioEmuMsvc/src" ]; then
+            find ../CasioEmuMsvc/src -name "*.cpp" ! -name "*Win32*" ! -name "*Linux*" ! -name "*SysDialog.cpp*" > sources.txt
+          else
+            # Nếu để code ngay ngoài thư mục gốc
+            find .. -maxdepth 2 -name "*.cpp" ! -name "*Win32*" ! -name "*Linux*" > sources.txt
           fi
-          echo "✅ Using scheme: $main_scheme"
-          echo "SCHEME=$main_scheme" >> $GITHUB_ENV
-
-      - name: Build with Xcode (unsigned)
-        run: |
-          xcodebuild -project CasioEmuMsvc/CasioEmuMsvc.xcodeproj \
-            -scheme "${{ env.SCHEME }}" \
-            -configuration Release \
-            -sdk iphoneos \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            ONLY_ACTIVE_ARCH=NO
-
-      - name: Package unsigned .app into .ipa
-        run: |
-          mkdir -p Payload
-          APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData CasioEmuMsvc -name "*.app" -type d 2>/dev/null | head -n 1)
-          if [ -z "$APP_PATH" ]; then
-            echo "❌ .app not found!"
-            exit 1
+          
+          # Lấy tài nguyên từ thư viện SDL2 đi kèm repo
+          if [ -d "../SDL/src" ]; then
+            find ../SDL/src -name "*.c" ! -name "*windows*" ! -name "*android*" ! -name "*linux*" ! -name "*winrt*" >> sources.txt
           fi
-          echo "Found .app at $APP_PATH"
-          cp -R "$APP_PATH" Payload/
-          zip -r CasioEmuMsvc.ipa Payload/
+          
+          # Lấy tài nguyên từ thư viện SDL_image đi kèm repo
+          if [ -d "../SDL_image/src" ]; then
+            find ../SDL_image/src -name "*.c" >> sources.txt
+          fi
 
-      - name: Upload IPA as artifact
+          # Tạo file mock SysDialog để tránh lỗi thiếu thư viện giao diện máy tính
+          cat > SysDialog_mock.cpp << 'EOF'
+          #include <string>
+          class SysDialog {
+          public:
+              static void ShowMessageBox(const std::string& t, const std::string& m) {}
+              static bool ShowOpenFileDialog(const std::string& t, const std::string& f, std::string& o) { return false; }
+              static bool ShowSaveFileDialog(const std::string& t, const std::string& f, std::string& o) { return false; }
+              static bool ShowFolderDialog(const std::string& t, std::string& o) { return false; }
+          };
+          EOF
+          echo "SysDialog_mock.cpp" >> sources.txt
+          
+          echo "📊 Danh sách file thu thập được để chế tạo:"
+          cat sources.txt
+
+      - name: Compile and Link From List
+        run: |
+          cd ios_build
+          
+          # Xác định đường dẫn include đúng dựa vào cấu trúc repo
+          INCLUDES="-I../SDL/include -I../SDL_image"
+          if [ -d "../src" ]; then INCLUDES="$INCLUDES -I../src"; fi
+          if [ -d "../CasioEmuMsvc/src" ]; then INCLUDES="$INCLUDES -I../CasioEmuMsvc/src"; fi
+          
+          echo "🚀 Kích hoạt Clang biên dịch trực tiếp danh sách tài nguyên..."
+          xcrun -sdk iphoneos clang++ -arch arm64 -miphoneos-version-min=13.0 \
+            -isysroot $(xcrun -sdk iphoneos --show-sdk-path) \
+            $INCLUDES \
+            -D__IPHONEOS__ -D__APPLE__ -DSDL_VIDEO_DRIVER_UIKIT=1 \
+            -std=c++17 -O2 \
+            -filelist sources.txt \
+            -framework UIKit -framework Foundation -framework CoreGraphics -framework QuartzCore -framework OpenGLES -framework AudioToolbox -framework CoreAudio -framework AVFoundation -framework GameController -framework CoreMotion \
+            -o Payload/CasioEmu.app/CasioEmu
+
+      - name: Finalize and Package IPA
+        run: |
+          cd ios_build
+          echo "📊 Kích thước file thực thi sau khi chế tạo:"
+          ls -lh Payload/CasioEmu.app/CasioEmu || echo "⚠️ Không tìm thấy file thực thi!"
+          
+          echo "🗜️ Đóng gói thành tệp cài đặt định dạng .ipa..."
+          zip -r ../CasioEmuMsvc.ipa Payload/
+
+      - name: Upload Finished IPA
         uses: actions/upload-artifact@v4
         with:
-          name: CasioEmuMsvc
+          name: CasioEmu-RepoResource
           path: CasioEmuMsvc.ipa
           retention-days: 7
