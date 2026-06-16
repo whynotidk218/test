@@ -38,10 +38,8 @@ jobs:
 
       - name: Create symlinks for SDL2 compatibility (root level)
         run: |
-          # Tạo symlink ở thư mục gốc để CMake trong CasioEmuMsvc thấy ../SDL2
           ln -sf SDL SDL2
           ln -sf SDL_image SDL2_image
-          echo "Symlinks created:"
           ls -la | grep SDL
 
       - name: Install iOS CMake toolchain
@@ -60,11 +58,28 @@ jobs:
             -DDEPLOYMENT_TARGET=13.0 \
             -DENABLE_BITCODE=OFF
 
+      - name: List available schemes
+        id: list_schemes
+        run: |
+          cd build-ios
+          echo "📋 All schemes in project:"
+          xcodebuild -project CasioEmuMsvc.xcodeproj -list
+          # Lấy danh sách schemes (dòng bắt đầu bằng "Schemes:" và các dòng tiếp theo)
+          schemes=$(xcodebuild -project CasioEmuMsvc.xcodeproj -list -json | jq -r '.project.schemes[]')
+          echo "Raw schemes: $schemes"
+          # Loại bỏ các scheme phụ trợ (ALL_BUILD, ZERO_CHECK, install, package)
+          main_scheme=$(echo "$schemes" | grep -v -e "ALL_BUILD" -e "ZERO_CHECK" -e "install" -e "package" | head -n 1)
+          if [ -z "$main_scheme" ]; then
+            main_scheme=$(echo "$schemes" | head -n 1)
+          fi
+          echo "✅ Using scheme: $main_scheme"
+          echo "SCHEME=$main_scheme" >> $GITHUB_ENV
+
       - name: Build with Xcode (unsigned)
         run: |
           cd build-ios
           xcodebuild -project CasioEmuMsvc.xcodeproj \
-            -scheme CasioEmuMsvc \
+            -scheme "${{ env.SCHEME }}" \
             -configuration Release \
             -sdk iphoneos \
             CODE_SIGN_IDENTITY="" \
