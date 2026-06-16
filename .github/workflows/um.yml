@@ -175,22 +175,17 @@ jobs:
           cp ios_stubs/SysDialog.cpp CasioEmuMsvc/src/Ext/SysDialog.cpp
           echo "✅ SysDialog replaced with stub"
 
-      
       - name: Patch StartupUi for iOS
         run: |
           echo "🔧 Patching StartupUi.cpp"
-    
           if [ -f CasioEmuMsvc/src/StartupUi/StartupUi.cpp ]; then
             sed -i '' \
             's/bool ok = CreateDesktopShortcut(shortcut_model_path, name_str, icon_str);/bool ok = false;/g' \
             CasioEmuMsvc/src/StartupUi/StartupUi.cpp
-    
             echo "✅ StartupUi patched"
           else
             echo "⚠️ StartupUi.cpp not found"
           fi
-
-
 
       - name: Create Info.plist
         run: |
@@ -236,26 +231,11 @@ jobs:
           </plist>
           EOF
 
-      - name: Install iOS CMake toolchain
-        run: |
-          curl -L -o ios.toolchain.cmake https://raw.githubusercontent.com/leetal/ios-cmake/master/ios.toolchain.cmake
-
-      - name: Configure CMake for iOS (device)
-        run: |
-          mkdir -p build-ios
-          cd build-ios
-          cmake .. -G Xcode \
-            -DCMAKE_TOOLCHAIN_FILE=../ios.toolchain.cmake \
-            -DPLATFORM=OS64 \
-            -DDEPLOYMENT_TARGET=13.0 \
-            -DENABLE_BITCODE=OFF
-
       - name: List available schemes and select the main one
         id: select_scheme
         run: |
-          cd build-ios
-          echo "📋 All schemes:"
-          schemes=$(xcodebuild -project CasioEmuMsvc.xcodeproj -list -json | jq -r '.project.schemes[]')
+          echo "📋 All schemes from CasioEmuMsvc project:"
+          schemes=$(xcodebuild -project CasioEmuMsvc/CasioEmuMsvc.xcodeproj -list -json | jq -r '.project.schemes[]')
           echo "$schemes"
           main_scheme=$(echo "$schemes" | grep -v -e "ALL_BUILD" -e "ZERO_CHECK" -e "install" -e "package" | head -n 1)
           if [ -z "$main_scheme" ]; then
@@ -266,8 +246,7 @@ jobs:
 
       - name: Build with Xcode (unsigned)
         run: |
-          cd build-ios
-          xcodebuild -project CasioEmuMsvc.xcodeproj \
+          xcodebuild -project CasioEmuMsvc/CasioEmuMsvc.xcodeproj \
             -scheme "${{ env.SCHEME }}" \
             -configuration Release \
             -sdk iphoneos \
@@ -279,7 +258,7 @@ jobs:
       - name: Package unsigned .app into .ipa
         run: |
           mkdir -p Payload
-          APP_PATH=$(find build-ios -name "*.app" -type d | head -n 1)
+          APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData CasioEmuMsvc -name "*.app" -type d 2>/dev/null | head -n 1)
           if [ -z "$APP_PATH" ]; then
             echo "❌ .app not found!"
             exit 1
